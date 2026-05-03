@@ -6,67 +6,22 @@ from geopy.distance import geodesic
 from geopy.geocoders import Nominatim
 import pandas as pd
 import concurrent.futures
-import time  # SPAM KORUMASI İÇİN EKLENDİ
+import time
+import re
 
 # ==========================================
-# 0. UI CSS HACKS & LANGUAGE DICTIONARY
+# UI & CSS CONFIGURATION
 # ==========================================
 st.set_page_config(page_title="HomeFit Agent", layout="wide")
 
-# =========================================================
-# KUSURSUZ EMOJİ BUTONLARI İÇİN ÖZEL CSS (YUVARLAKLAR İPTAL)
-# =========================================================
 st.markdown("""
     <style>
-    /* 1. Tüm container'ı kesinlikle yatay ve hizalı yap */
-    div[role="radiogroup"] {
-        display: flex !important;
-        flex-direction: row !important;
-        flex-wrap: nowrap !important; /* Asla alt satıra geçme */
-        gap: 5px !important;
-        justify-content: flex-end !important;
-    }
-    
-    /* 2. Streamlit'in varsayılan yuvarlaklarını (radio circle) GİZLE */
-    div[role="radiogroup"] > label > div:first-child {
-        display: none !important;
-    }
-    
-    /* 3. Tıklanabilir alanları (Label) düzelt */
-    div[role="radiogroup"] > label {
-        cursor: pointer !important;
-        margin: 0 !important;
-        padding: 0 !important;
-    }
-    
-    /* 4. Emojilerin Genel Görünümü (12px olarak güncellendi) */
-    div[role="radiogroup"] > label p {
-        font-size: 12px !important; 
-        margin: 0 !important;
-        padding: 4px 8px !important;
-        border-radius: 8px !important;
-        transition: all 0.2s ease-in-out !important;
-        line-height: 1 !important;
-    }
-    
-    /* 5. SEÇİLİ OLMAYAN (Pasif) Emojiler: Soluk ve küçük */
-    div[role="radiogroup"] label:has(input:not(:checked)) p {
-        opacity: 0.3 !important;
-        filter: grayscale(80%) !important;
-        transform: scale(0.85) !important;
-        background-color: transparent !important;
-        border: 1px solid transparent !important;
-    }
-    
-    /* 6. SEÇİLİ OLAN (Aktif) Emoji: Parlak, büyük ve çerçeveli */
-    div[role="radiogroup"] label:has(input:checked) p {
-        opacity: 1.0 !important;
-        filter: grayscale(0%) !important;
-        transform: scale(1.1) !important;
-        background-color: rgba(255, 255, 255, 0.15) !important;
-        border: 1px solid rgba(255, 255, 255, 0.4) !important;
-        box-shadow: 0px 2px 5px rgba(0,0,0,0.2) !important;
-    }
+    div[role="radiogroup"] { display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; gap: 5px !important; justify-content: flex-end !important; }
+    div[role="radiogroup"] > label > div:first-child { display: none !important; }
+    div[role="radiogroup"] > label { cursor: pointer !important; margin: 0 !important; padding: 0 !important; }
+    div[role="radiogroup"] > label p { font-size: 12px !important; margin: 0 !important; padding: 4px 8px !important; border-radius: 8px !important; transition: all 0.2s ease-in-out !important; line-height: 1 !important; }
+    div[role="radiogroup"] label:has(input:not(:checked)) p { opacity: 0.3 !important; filter: grayscale(80%) !important; transform: scale(0.85) !important; background-color: transparent !important; border: 1px solid transparent !important; }
+    div[role="radiogroup"] label:has(input:checked) p { opacity: 1.0 !important; filter: grayscale(0%) !important; transform: scale(1.1) !important; background-color: rgba(255, 255, 255, 0.15) !important; border: 1px solid rgba(255, 255, 255, 0.4) !important; box-shadow: 0px 2px 5px rgba(0,0,0,0.2) !important; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -74,7 +29,7 @@ LANG = {
     "EN": {
         "title": "🏠 HomeFit Agent",
         "search_title": "🔍 Search Address & Location",
-        "search_hint": "💡 **Pro Tip:** Search for your street or neighborhood, then click the exact building on the map.",
+        "search_hint": "💡 **Pro Tip:** Search for your street, then click your EXACT building on the map.",
         "search_ph": "e.g., Maslak, Sariyer",
         "search_btn": "Search Address",
         "not_found": "Address not found.",
@@ -84,7 +39,7 @@ LANG = {
         "legend": "❌ Ignore &nbsp;&nbsp;|&nbsp;&nbsp; ➖ Normal &nbsp;&nbsp;|&nbsp;&nbsp; ⭐ Crucial",
         "run_btn": "🚀 Run GeoAI Analysis",
         "err_no_cat": "Please select at least one facility!",
-        "spin_msg": "Agent is calculating paths safely...",
+        "spin_msg": "Agent is executing spatial analysis...",
         "map_title": "### Interactive Map",
         "target_home": "Target Home",
         "report_title": "### 🤖 Agent Report",
@@ -97,12 +52,16 @@ LANG = {
         "download_btn": "📥 Download Visual Report",
         "prompt_select": "Set your preferences on the left and click **Run GeoAI Analysis**.",
         "col_fac": "Facility",
-        "col_score": "Suitability"
+        "col_score": "Suitability",
+        "interp_title": "### 🧠 Agent Interpretation",
+        "log_title": "### 📜 Agent Decision Log",
+        "warn_search": "⚠️ Map is centered on the street. For exact results, please click on your specific building on the map!",
+        "succ_click": "✅ Exact building location verified."
     },
     "TR": {
         "title": "🏠 HomeFit Ajanı",
         "search_title": "🔍 Adres ve Konum Ara",
-        "search_hint": "💡 **İpucu:** En iyi sonuç için sokağınızı aratıp haritadan evinizin üzerine tıklayın.",
+        "search_hint": "💡 **İpucu:** Sokağınızı aratın, ardından haritadan TAM binanızın üzerine tıklayın.",
         "search_ph": "Örn: Maslak, Sarıyer",
         "search_btn": "Adresi Ara",
         "not_found": "Adres bulunamadı.",
@@ -112,7 +71,7 @@ LANG = {
         "legend": "❌ Yok Say &nbsp;&nbsp;|&nbsp;&nbsp; ➖ Normal &nbsp;&nbsp;|&nbsp;&nbsp; ⭐ Çok Önemli",
         "run_btn": "🚀 GeoAI Analizini Başlat",
         "err_no_cat": "Lütfen en az bir tesis türü seçin!",
-        "spin_msg": "Ajan ağ yollarını güvenli hesaplıyor...",
+        "spin_msg": "Ajan mekansal analizi yürütüyor...",
         "map_title": "### İnteraktif Harita",
         "target_home": "Hedef Ev",
         "report_title": "### 🤖 Ajan Raporu",
@@ -125,76 +84,21 @@ LANG = {
         "download_btn": "📥 Görsel Raporu İndir",
         "prompt_select": "Soldan tercihlerinizi ayarlayın ve **GeoAI Analizini Başlat** butonuna tıklayın.",
         "col_fac": "Tesis",
-        "col_score": "Uygunluk"
+        "col_score": "Uygunluk",
+        "interp_title": "### 🧠 Ajan Yorumu",
+        "log_title": "### 📜 Ajan Karar Günlüğü",
+        "warn_search": "⚠️ Harita sokak merkezine odaklandı. Kesin sonuç için lütfen haritadan tam binanızın üzerine tıklayın!",
+        "succ_click": "✅ Bina konumu doğrulandı."
     }
 }
 
 # ==========================================
-# 1. AGENT CORE FUNCTIONS (SPAM KORUMALI)
+# HELPER FUNCTIONS
 # ==========================================
-def get_facilities_from_osm(lat, lon, tags, radius=3000, retries=3):
-    overpass_url = "http://overpass-api.de/api/interpreter"
-    headers = {'User-Agent': 'HomeFitAgent/15.0'}
-    tag_str = "".join([f'["{k}"="{v}"]' for k, v in tags.items()])
-    overpass_query = f"""
-    [out:json][timeout:25];
-    (
-      node{tag_str}(around:{radius},{lat},{lon});
-      way{tag_str}(around:{radius},{lat},{lon});
-      relation{tag_str}(around:{radius},{lat},{lon});
-    );
-    out center;
-    """
-    
-    # SPAM ENGELİ AŞMA DÖNGÜSÜ (Retry Logic)
-    for attempt in range(retries):
-        try:
-            response = requests.post(overpass_url, data={'data': overpass_query}, headers=headers, timeout=15)
-            if response.status_code == 200:
-                data = response.json()
-                return [(e['lat'], e['lon']) if e['type'] == 'node' else (e['center']['lat'], e['center']['lon']) 
-                        for e in data.get('elements', [])]
-            elif response.status_code == 429: # Rate Limit (Spam) engeli yersek
-                time.sleep(1.5 * (attempt + 1)) # Bekle ve tekrar dene
-            else:
-                break
-        except Exception:
-            time.sleep(1) # Bağlantı hatası olursa 1 saniye bekle tekrar dene
-            
-    return []
-
-def get_network_data(lat1, lon1, lat2, lon2, retries=2):
-    url = f"http://router.project-osrm.org/route/v1/driving/{lon1},{lat1};{lon2},{lat2}?overview=false"
-    
-    for attempt in range(retries):
-        try:
-            response = requests.get(url, timeout=5)
-            if response.status_code == 200:
-                data = response.json()
-                if data['code'] == 'Ok':
-                    drive_dist = data['routes'][0]['distance'] 
-                    drive_dur = data['routes'][0]['duration'] 
-                    walk_dist = drive_dist * 0.95 
-                    walk_dur = walk_dist / 1.38 
-                    return walk_dist, walk_dur, drive_dist, drive_dur
-            elif response.status_code == 429:
-                time.sleep(1)
-        except:
-            time.sleep(0.5)
-            
-    return None, None, None, None
-
-def format_duration(seconds):
-    if seconds is None: return "--"
-    if seconds < 60: return "<1 min"
-    return f"{int(seconds // 60)} min"
-
-def get_score_from_distance(distance):
-    if distance <= 300: return 100
-    elif distance <= 600: return 80
-    elif distance <= 1200: return 60
-    elif distance <= 2500: return 40
-    return 0
+def md_to_html(text):
+    """HTML rapor için basit markdown çevirici"""
+    text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
+    return text.replace("\n", "<br>")
 
 def get_cat_config(cat_name):
     c = cat_name.lower()
@@ -206,16 +110,56 @@ def get_cat_config(cat_name):
     if "bus" in c or "otobüs" in c: return {"color": "blue", "icon": "bus", "prefix":"fa", "emoji": "🚌"}
     if "supermarket" in c or "market" in c: return {"color": "orange", "icon": "shopping-cart", "prefix":"fa", "emoji": "🛒"}
     if "park" in c: return {"color": "cadetblue", "icon": "tree", "prefix":"fa", "emoji": "🌳"}
-    if "school" in c or "okul" in c or "lise" in c or "anaokulu" in c or "ortaokul" in c: 
-        return {"color": "lightred", "icon": "graduation-cap", "prefix":"fa", "emoji": "🏫"}
+    if "school" in c or "okul" in c or "lise" in c or "anaokulu" in c or "ortaokul" in c: return {"color": "lightred", "icon": "graduation-cap", "prefix":"fa", "emoji": "🏫"}
     if "mosque" in c or "cami" in c: return {"color": "darkgreen", "icon": "moon-o", "prefix":"fa", "emoji": "🕌"}
     if "church" in c or "kilise" in c: return {"color": "lightgray", "icon": "plus", "prefix":"fa", "emoji": "⛪"}
     if "synagogue" in c or "sinagog" in c: return {"color": "darkblue", "icon": "star", "prefix":"fa", "emoji": "🕍"}
     if "cemevi" in c: return {"color": "orange", "icon": "users", "prefix":"fa", "emoji": "📿"}
     return {"color": "gray", "icon": "info-circle", "prefix":"fa", "emoji": "📍"}
 
+def format_duration(seconds):
+    if seconds is None: return "--"
+    if seconds < 60: return "<1 min"
+    return f"{int(seconds // 60)} min"
+
 # ==========================================
-# 2. AGENT BRAIN 
+# MODULE 2: GEOSPATIAL DATA RETRIEVER (CACHED)
+# ==========================================
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_facilities_from_osm(lat, lon, tags, radius=3000, retries=3):
+    overpass_url = "http://overpass-api.de/api/interpreter"
+    headers = {'User-Agent': 'HomeFitAgent/18.0'}
+    tag_str = "".join([f'["{k}"="{v}"]' for k, v in tags.items()])
+    overpass_query = f"[out:json][timeout:25];(node{tag_str}(around:{radius},{lat},{lon});way{tag_str}(around:{radius},{lat},{lon});relation{tag_str}(around:{radius},{lat},{lon}););out center;"
+    
+    for attempt in range(retries):
+        try:
+            response = requests.post(overpass_url, data={'data': overpass_query}, headers=headers, timeout=15)
+            if response.status_code == 200:
+                data = response.json()
+                return [(e['lat'], e['lon']) if e['type'] == 'node' else (e['center']['lat'], e['center']['lon']) for e in data.get('elements', [])]
+            elif response.status_code == 429: time.sleep(1.5 * (attempt + 1))
+            else: break
+        except: time.sleep(1)
+    return []
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_network_data(lat1, lon1, lat2, lon2, retries=2):
+    url = f"http://router.project-osrm.org/route/v1/driving/{lon1},{lat1};{lon2},{lat2}?overview=false"
+    for attempt in range(retries):
+        try:
+            response = requests.get(url, timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                if data['code'] == 'Ok':
+                    drive_dist = data['routes'][0]['distance'] 
+                    return drive_dist * 0.95, (drive_dist * 0.95) / 1.38, drive_dist, data['routes'][0]['duration'] 
+            elif response.status_code == 429: time.sleep(1)
+        except: time.sleep(0.5)
+    return None, None, None, None
+
+# ==========================================
+# MODULE 3: SPATIAL ACCESSIBILITY ANALYZER
 # ==========================================
 def process_single_category(cat_name, info, user_lat, user_lon):
     weight = info["weight"]
@@ -228,49 +172,88 @@ def process_single_category(cat_name, info, user_lat, user_lon):
         
         walk_dist, walk_dur, drive_dist, drive_dur = get_network_data(user_lat, user_lon, nearest_coord[0], nearest_coord[1])
         if walk_dist is None:
-            walk_dist, drive_dist = min_be_dist * 1.2, min_be_dist * 1.3
+            walk_dist, drive_dist = min_be_dist * 1.3, min_be_dist * 1.4
             walk_dur, drive_dur = walk_dist / 1.38, drive_dist / 8.33 
         
         score = get_score_from_distance(walk_dist)
-        metrics = {
-            "bird": round(min_be_dist, 1),
-            "walk_d": round(walk_dist, 1),
-            "walk_t": format_duration(walk_dur),
-            "drive_d": round(drive_dist, 1),
-            "drive_t": format_duration(drive_dur)
-        }
+        metrics = {"bird": round(min_be_dist, 1), "walk_d": round(walk_dist, 1), "walk_t": format_duration(walk_dur), "drive_d": round(drive_dist, 1), "drive_t": format_duration(drive_dur)}
     else:
-        score = -50 if weight == 2 else 0
-        nearest_coord = None
-        metrics = None
+        score, nearest_coord, metrics = (-50 if weight == 2 else 0), None, None
         
     return cat_name, score, weight, nearest_coord, metrics
 
+def get_score_from_distance(distance):
+    if distance <= 300: return 100
+    elif distance <= 600: return 80
+    elif distance <= 1200: return 60
+    elif distance <= 2500: return 40
+    return 0
+
+# ==========================================
+# MODULE 4: SCORING & RECOMMENDATION ENGINE
+# ==========================================
 def home_fit_agent_decision(user_lat, user_lon, selected_categories):
+    # Yuvarlama iptal edildi, tam lokasyon ile hesaplanıyor
     results = {}
-    total_weighted_score = 0
-    total_weight = 0
+    total_weighted_score, total_weight = 0, 0
     
-    # SPAM KORUMASI: Aynı anda en fazla 2 kategori işlenir. (6'dan 2'ye düşürüldü)
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-        futures = [executor.submit(process_single_category, c_name, info, user_lat, user_lon) 
-                   for c_name, info in selected_categories.items()]
-        
+        futures = [executor.submit(process_single_category, c_name, info, user_lat, user_lon) for c_name, info in selected_categories.items()]
         for future in concurrent.futures.as_completed(futures):
             cat_name, score, weight, nearest_coord, metrics = future.result()
             total_weighted_score += (score * weight)
             total_weight += weight
-            results[cat_name] = {
-                "score": score,
-                "nearest": nearest_coord,
-                "metrics": metrics
-            }
-    
+            results[cat_name] = {"score": score, "nearest": nearest_coord, "metrics": metrics}
+            
     final_score = total_weighted_score / total_weight if total_weight > 0 else 0
     return round(max(0, final_score), 2), results
 
+def generate_agent_interpretation(final_score, details, lang="EN"):
+    if not details: return "No analysis results were generated." if lang == "EN" else "Analiz sonucu üretilemedi."
+
+    if final_score >= 80: s_class = "highly suitable" if lang == "EN" else "yüksek oranda uygun"
+    elif final_score >= 60: s_class = "moderately suitable" if lang == "EN" else "orta derecede uygun"
+    elif final_score >= 40: s_class = "partially suitable" if lang == "EN" else "kısmen uygun"
+    else: s_class = "poorly suitable" if lang == "EN" else "düşük oranda uygun"
+
+    valid_items = {cat: data for cat, data in details.items() if data.get("score") is not None}
+    if not valid_items: return ""
+
+    best_cat, best_data = max(valid_items.items(), key=lambda x: x[1]["score"])
+    worst_cat, worst_data = min(valid_items.items(), key=lambda x: x[1]["score"])
+
+    best_distance = best_data["metrics"].get("walk_d") if best_data.get("metrics") else None
+    worst_distance = worst_data["metrics"].get("walk_d") if worst_data.get("metrics") else None
+
+    if lang == "EN":
+        interp = f"The selected address is **{s_class}** according to the user's selected preferences, with an overall HomeFit score of **{final_score}/100**.\n\n"
+        interp += f"The strongest accessibility category is **{best_cat}**, which received a score of **{max(0, best_data['score'])}/100**."
+        if best_distance: interp += f" The estimated walking distance to the nearest {best_cat} is approximately **{best_distance} meters**.\n\n"
+        interp += f"The weakest accessibility category is **{worst_cat}**, which received a score of **{max(0, worst_data['score'])}/100**."
+        if worst_distance: interp += f" The estimated walking distance to the nearest {worst_cat} is approximately **{worst_distance} meters**.\n\n"
+        interp += "The final score was calculated using a weighted preference model. Categories marked as crucial have a stronger influence on the final suitability score, while ignored categories are excluded from the analysis."
+    else:
+        interp = f"Seçilen adres, kullanıcının belirlediği tercihlere göre **{s_class}** olarak değerlendirilmiş olup, genel HomeFit skoru **{final_score}/100** olarak hesaplanmıştır.\n\n"
+        interp += f"Erişilebilirliği en güçlü olan kategori **{best_cat}** olup, **{max(0, best_data['score'])}/100** puan almıştır."
+        if best_distance: interp += f" En yakın {best_cat} için tahmini yürüme mesafesi yaklaşık **{best_distance} metre**dir.\n\n"
+        interp += f"Erişilebilirliği en zayıf olan kategori **{worst_cat}** olup, **{max(0, worst_data['score'])}/100** puan almıştır."
+        if worst_distance: interp += f" En yakın {worst_cat} için tahmini yürüme mesafesi yaklaşık **{worst_distance} metre**dir.\n\n"
+        interp += "Nihai skor, ağırlıklı bir tercih modeli kullanılarak hesaplanmıştır. Çok önemli (Crucial) olarak işaretlenen kategoriler nihai uygunluk skorunu daha güçlü etkilerken, yok sayılan kategoriler analizin dışında tutulmuştur."
+
+    return interp
+
+def generate_agent_decision_log(selected_categories, lang="EN"):
+    selected_count = len(selected_categories)
+    crucial = [cat for cat, info in selected_categories.items() if info["weight"] == 2]
+    normal = [cat for cat, info in selected_categories.items() if info["weight"] == 1]
+
+    if lang == "EN":
+        return f"1. The agent received **{selected_count} selected facility categories** from the user.\n2. Categories marked as ignored were excluded from the analysis.\n3. The agent identified **{len(crucial)} crucial** and **{len(normal)} normal** preference categories.\n4. For each selected category, the agent retrieved relevant OpenStreetMap POI data.\n5. The nearest facility was identified using geodesic distance.\n6. Network-based accessibility metrics were estimated for walking and driving.\n7. A weighted suitability score was calculated based on the user's preference levels."
+    else:
+        return f"1. Ajan, kullanıcıdan **{selected_count} adet seçili tesis kategorisi** aldı.\n2. 'Yok Say' olarak işaretlenen kategoriler analizden dışlandı.\n3. Ajan, **{len(crucial)} çok önemli** ve **{len(normal)} normal** tercih kategorisi belirledi.\n4. Seçilen her kategori için OpenStreetMap'ten ilgili POI verileri çekildi.\n5. Kuş uçuşu mesafe kullanılarak en yakın tesisler tespit edildi.\n6. Yürüme ve araç kullanımı için ağ tabanlı erişilebilirlik metrikleri hesaplandı.\n7. Kullanıcının tercih seviyelerine dayalı olarak ağırlıklı bir uygunluk skoru üretildi."
+
 # ==========================================
-# 3. SETUP & UI
+# UI RENDER LOGIC
 # ==========================================
 col1, col2 = st.columns([8, 2])
 with col2:
@@ -282,6 +265,7 @@ if 'analysis_results' not in st.session_state: st.session_state.analysis_results
 if 'user_lat' not in st.session_state: st.session_state.user_lat = 41.1044
 if 'user_lon' not in st.session_state: st.session_state.user_lon = 29.0284
 if 'address_options' not in st.session_state: st.session_state.address_options = None
+if 'loc_method' not in st.session_state: st.session_state.loc_method = "default"
 
 st.title(t["title"])
 
@@ -293,8 +277,7 @@ with st.expander(t["search_title"], expanded=True):
     if col_s2.button(t["search_btn"]):
         geolocator = Nominatim(user_agent="homefit_explorer")
         locations = geolocator.geocode(search_query, exactly_one=False, limit=8, country_codes="tr")
-        if locations:
-            st.session_state.address_options = {loc.address: loc for loc in locations}
+        if locations: st.session_state.address_options = {loc.address: loc for loc in locations}
         else:
             st.error(t["not_found"])
             st.session_state.address_options = None
@@ -307,44 +290,27 @@ with st.expander(t["search_title"], expanded=True):
             st.session_state.user_lat, st.session_state.user_lon = selected_loc.latitude, selected_loc.longitude
             st.session_state.analysis_results = None
             st.session_state.address_options = None 
+            st.session_state.loc_method = "search"
             st.rerun()
 
-# ----------------- SIDEBAR -----------------
+# ----------------- SIDEBAR (PREFERENCE INTERPRETER) -----------------
 st.sidebar.header(t["prefs_title"])
-
-# --- 1. SATIR: SADE VE ŞIK LEJANT ---
 st.sidebar.markdown(f"<div style='background-color:#1e1e1e; padding:12px; border-radius:8px; text-align:center; font-size:15px; margin-bottom:20px; box-shadow: 0px 4px 6px rgba(0,0,0,0.1);'><b>{t['legend']}</b></div>", unsafe_allow_html=True)
 selected_prefs = {}
 
 def render_pref(label_en, label_tr, base_tags=None, opts_dict=None):
     disp_label = label_en if selected_lang == "EN" else label_tr
-    
     c1, c2 = st.sidebar.columns([1, 1])
-    with c1:
-        st.markdown(f"<div style='margin-top:12px; font-size:16px; white-space: nowrap;'><b>{disp_label}</b></div>", unsafe_allow_html=True)
-    with c2:
-        imp = st.radio(
-            f"w_{label_en}",
-            ["❌", "➖", "⭐"], 
-            horizontal=True,
-            label_visibility="collapsed"
-        )
+    with c1: st.markdown(f"<div style='margin-top:12px; font-size:16px; white-space: nowrap;'><b>{disp_label}</b></div>", unsafe_allow_html=True)
+    with c2: imp = st.radio(f"w_{label_en}", ["❌", "➖", "⭐"], horizontal=True, label_visibility="collapsed")
     weight = {"❌": 0, "➖": 1, "⭐": 2}[imp]
 
     if weight > 0:
         if opts_dict:
             opt_keys = list(opts_dict.keys())
-            selected_subs = st.sidebar.multiselect(
-                " " ,
-                opt_keys,
-                default=[opt_keys[0]],
-                key=f"sel_{label_en}",
-                label_visibility="collapsed"
-            )
-            for sub in selected_subs:
-                selected_prefs[f"{disp_label} ({sub.split('/')[0].strip()})"] = {"tags": opts_dict[sub], "weight": weight}
-        else:
-            selected_prefs[disp_label] = {"tags": base_tags, "weight": weight}
+            selected_subs = st.sidebar.multiselect(" ", opt_keys, default=[opt_keys[0]], key=f"sel_{label_en}", label_visibility="collapsed")
+            for sub in selected_subs: selected_prefs[f"{disp_label} ({sub.split('/')[0].strip()})"] = {"tags": opts_dict[sub], "weight": weight}
+        else: selected_prefs[disp_label] = {"tags": base_tags, "weight": weight}
             
     st.sidebar.markdown("<hr style='margin: 10px 0; border-top: 1px dashed #333;'>", unsafe_allow_html=True)
 
@@ -353,71 +319,45 @@ render_pref("Pharmacy", "Eczane", base_tags={"amenity": "pharmacy"})
 render_pref("Veterinary", "Veteriner", base_tags={"amenity": "veterinary"})
 render_pref("Supermarket", "Market", base_tags={"shop": "supermarket"})
 render_pref("Park", "Park", base_tags={"leisure": "park"})
-
-t_opts = {
-    "Bus / Otobüs": {"highway": "bus_stop"},
-    "Metro / Subway": {"station": "subway"},
-    "Tram / Tramvay": {"railway": "tram_stop"}
-}
-render_pref("Public Transit", "Toplu Taşıma", opts_dict=t_opts)
-
-s_opts = {
-    "Kindergarten / Anaokulu": {"amenity": "kindergarten"},
-    "Primary / İlkokul": {"amenity": "school", "school": "primary"},
-    "Middle / Ortaokul": {"amenity": "school", "school": "secondary"},
-    "High / Lise": {"amenity": "school"}
-}
-render_pref("School", "Okul", opts_dict=s_opts)
-
-w_opts = {
-    "Mosque / Cami": {"amenity": "place_of_worship", "religion": "muslim"},
-    "Church / Kilise": {"amenity": "place_of_worship", "religion": "christian"},
-    "Synagogue / Sinagog": {"amenity": "place_of_worship", "religion": "jewish"},
-    "Cemevi": {"amenity": "place_of_worship", "religion": "alevi"}
-}
-render_pref("Worship", "İbadethane", opts_dict=w_opts)
+render_pref("Public Transit", "Toplu Taşıma", opts_dict={"Bus / Otobüs": {"highway": "bus_stop"}, "Metro / Subway": {"station": "subway"}, "Tram / Tramvay": {"railway": "tram_stop"}})
+render_pref("School", "Okul", opts_dict={"Kindergarten / Anaokulu": {"amenity": "kindergarten"}, "Primary / İlkokul": {"amenity": "school", "school": "primary"}, "Middle / Ortaokul": {"amenity": "school", "school": "secondary"}, "High / Lise": {"amenity": "school"}})
+render_pref("Worship", "İbadethane", opts_dict={"Mosque / Cami": {"amenity": "place_of_worship", "religion": "muslim"}, "Church / Kilise": {"amenity": "place_of_worship", "religion": "christian"}, "Synagogue / Sinagog": {"amenity": "place_of_worship", "religion": "jewish"}, "Cemevi": {"amenity": "place_of_worship", "religion": "alevi"}})
 
 if st.sidebar.button(t["run_btn"], use_container_width=True):
-    if not selected_prefs:
-        st.sidebar.error(t["err_no_cat"])
+    if not selected_prefs: st.sidebar.error(t["err_no_cat"])
     else:
         with st.spinner(t["spin_msg"]):
             score, details = home_fit_agent_decision(st.session_state.user_lat, st.session_state.user_lon, selected_prefs)
-            st.session_state.analysis_results = {"score": score, "details": details}
+            st.session_state.analysis_results = {"score": score, "details": details, "selected_prefs": selected_prefs}
 
 # ----------------- MAIN LAYOUT -----------------
 col_map, col_res = st.columns([2, 3]) 
 
-m = folium.Map(location=[st.session_state.user_lat, st.session_state.user_lon], zoom_start=14)
-folium.Marker(
-    [st.session_state.user_lat, st.session_state.user_lon], 
-    popup=f"<b>{t['target_home']}</b>", 
-    icon=folium.Icon(color='black', icon='home')
-).add_to(m)
+# UI TEŞVİK MESAJLARI (Arama sonrası veya Tıklama sonrası)
+if st.session_state.loc_method == "search":
+    st.warning(t["warn_search"])
+elif st.session_state.loc_method == "map_click":
+    st.success(t["succ_click"])
+
+m = folium.Map(location=[st.session_state.user_lat, st.session_state.user_lon], zoom_start=15)
+folium.Marker([st.session_state.user_lat, st.session_state.user_lon], popup=f"<b>{t['target_home']}</b>", icon=folium.Icon(color='black', icon='home')).add_to(m)
 
 if st.session_state.analysis_results:
     for cat, data in st.session_state.analysis_results["details"].items():
         if data["nearest"]:
             cfg = get_cat_config(cat)
-            folium.Marker(
-                location=data["nearest"],
-                popup=cat,
-                icon=folium.Icon(color=cfg["color"], icon=cfg["icon"], prefix=cfg["prefix"])
-            ).add_to(m)
-            folium.PolyLine(
-                locations=[[st.session_state.user_lat, st.session_state.user_lon], data["nearest"]],
-                color=cfg["color"], weight=2, opacity=0.5, dash_array='5'
-            ).add_to(m)
+            folium.Marker(location=data["nearest"], popup=cat, icon=folium.Icon(color=cfg["color"], icon=cfg["icon"], prefix=cfg["prefix"])).add_to(m)
+            folium.PolyLine(locations=[[st.session_state.user_lat, st.session_state.user_lon], data["nearest"]], color=cfg["color"], weight=2, opacity=0.5, dash_array='5').add_to(m)
 
 with col_map:
     st.write(t["map_title"])
     map_display = st_folium(m, width=500, height=550, key="main_map")
-    
     if map_display['last_clicked']:
         if st.session_state.analysis_results is None:
             nl, nln = map_display['last_clicked']['lat'], map_display['last_clicked']['lng']
             if nl != st.session_state.user_lat:
                 st.session_state.user_lat, st.session_state.user_lon = nl, nln
+                st.session_state.loc_method = "map_click"
                 st.rerun()
 
 with col_res:
@@ -426,8 +366,7 @@ with col_res:
         st.write(t["report_title"])
         
         s_color = "normal" if res['score'] > 0 else "inverse"
-        st.metric(t["final_score"], f"{res['score']}/100", 
-                  delta=t["penalty_txt"] if res['score'] <= 0 else None, delta_color=s_color)
+        st.metric(t["final_score"], f"{res['score']}/100", delta=t["penalty_txt"] if res['score'] <= 0 else None, delta_color=s_color)
         
         v_mode = st.radio(t["view_mode"], t["view_opts"], horizontal=True)
         
@@ -436,7 +375,6 @@ with col_res:
             metrics = data['metrics']
             cfg = get_cat_config(cat)
             visual_score = max(0, data['score']) 
-            
             row = {t["col_fac"]: f"{cfg['emoji']} {cat}", t["col_score"]: visual_score}
             
             if metrics:
@@ -448,26 +386,26 @@ with col_res:
                 if v_mode in [t["view_opts"][0], t["view_opts"][1]]: row["Bird's-eye" if selected_lang=="EN" else "Kuş Bakışı"] = nf_txt
                 if v_mode in [t["view_opts"][0], t["view_opts"][2]]: row["Walking" if selected_lang=="EN" else "Yürüme"] = nf_txt
                 if v_mode in [t["view_opts"][0], t["view_opts"][3]]: row["Driving" if selected_lang=="EN" else "Araç"] = nf_txt
-                
             df_data.append(row)
             
-        final_df = pd.DataFrame(df_data)
+        st.dataframe(pd.DataFrame(df_data), column_config={t["col_score"]: st.column_config.ProgressColumn(t["col_score"], format="%d", min_value=0, max_value=100)}, hide_index=True, use_container_width=True)
         
-        st.dataframe(
-            final_df,
-            column_config={
-                t["col_score"]: st.column_config.ProgressColumn(
-                    t["col_score"],
-                    format="%d",
-                    min_value=0,
-                    max_value=100,
-                )
-            },
-            hide_index=True,
-            use_container_width=True
-        )
+        # --- AGENT INTERPRETATION & LOGGING ---
+        agent_interp_text = generate_agent_interpretation(res["score"], res["details"], selected_lang)
+        agent_log_text = generate_agent_decision_log(res["selected_prefs"], selected_lang)
         
-        # YAN YANA (SIDE-BY-SIDE) HTML RAPOR ÇIKTISI
+        st.markdown("---")
+        st.markdown(t["interp_title"])
+        st.info(agent_interp_text)
+        
+        st.markdown(t["log_title"])
+        with st.expander("🔍 View Process Log", expanded=False):
+            st.markdown(agent_log_text)
+            
+        # ==========================================
+        # GÖRSEL RAPOR ÇIKTISI ALMA (HTML)
+        # HTML içine Agent Yorumu ve Log eklendi
+        # ==========================================
         html_content = f"""
         <html>
         <head>
@@ -478,17 +416,14 @@ with col_res:
                 .container {{ max-width: 1200px; margin: auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0px 4px 15px rgba(0,0,0,0.05); }}
                 h2 {{ color: #1e293b; text-align: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 15px; margin-top: 0; }}
                 .score-box {{ background-color: #f0fdf4; color: #166534; padding: 15px; border-radius: 8px; font-size: 22px; font-weight: bold; text-align: center; margin: 20px 0; border: 1px solid #bbf7d0; }}
-                
+                .agent-box {{ background-color: #eff6ff; color: #1e3a8a; padding: 20px; border-radius: 8px; font-size: 14px; margin: 20px 0; border-left: 5px solid #3b82f6; }}
                 .content-wrapper {{ display: flex; flex-direction: row; gap: 30px; align-items: flex-start; margin-top: 20px; }}
-                
                 .map-container {{ flex: 1; min-width: 400px; max-width: 500px; height: 500px; border: 2px solid #e2e8f0; border-radius: 8px; overflow: hidden; }}
-                
                 .table-container {{ flex: 2; overflow-x: auto; }}
                 table {{ width: 100%; border-collapse: collapse; font-size: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
                 th, td {{ border: 1px solid #e2e8f0; padding: 12px 15px; text-align: left; }}
                 th {{ background-color: #f1f5f9; color: #334155; font-weight: bold; }}
                 tr:nth-child(even) {{ background-color: #f8fafc; }}
-                
                 .footer {{ margin-top: 40px; text-align: center; font-size: 12px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 15px; }}
             </style>
         </head>
@@ -497,12 +432,17 @@ with col_res:
                 <h2>{t['title']} - Visual Report</h2>
                 <div class="score-box">Final Location Score: {res['score']} / 100</div>
                 
+                <div class="agent-box">
+                    <h3 style="margin-top:0;">🧠 Agent Interpretation</h3>
+                    <p>{md_to_html(agent_interp_text)}</p>
+                </div>
+
                 <div class="content-wrapper">
                     <div class="map-container">
                         {m.get_root().render()}
                     </div>
                     <div class="table-container">
-                        {final_df.to_html(index=False, justify='left', escape=False)}
+                        {pd.DataFrame(df_data).to_html(index=False, justify='left', escape=False)}
                     </div>
                 </div>
                 
