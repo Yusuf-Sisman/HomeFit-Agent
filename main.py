@@ -94,20 +94,23 @@ LANG = {
 }
 
 # ==========================================
-# LLM AYARLARI (OTOMATİK MODEL KEŞFİ İLE)
+# LLM AYARLARI (HAFIZALI OTOMATİK MODEL KEŞFİ)
 # ==========================================
-try:
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-    if available_models:
-        chosen_model_name = next((m for m in available_models if 'flash' in m), available_models[0])
-        llm_model = genai.GenerativeModel(chosen_model_name)
-    else:
-        llm_model = None
-except Exception as e:
-    llm_model = None
-    print(f"GenAI Config Error: {e}")
+@st.cache_resource(show_spinner=False)
+def init_llm_model():
+    try:
+        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+        # Modelleri sadece uygulama ilk açıldığında 1 kere listeler ve hafızaya yazar!
+        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        if available_models:
+            chosen_model_name = next((m for m in available_models if 'flash' in m), available_models[0])
+            return genai.GenerativeModel(chosen_model_name)
+        return None
+    except Exception as e:
+        print(f"GenAI Config Error: {e}")
+        return None
 
+llm_model = init_llm_model()
 # ==========================================
 # HELPER FUNCTIONS
 # ==========================================
