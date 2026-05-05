@@ -104,7 +104,6 @@ LANG = {
 def init_llm_model():
     try:
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        # Model arama/listeleme kaldırıldı. Doğrudan 2.5 Flash kullanılıyor.
         return genai.GenerativeModel('gemini-2.5-flash')
     except Exception as e:
         print(f"GenAI Config Error: {e}")
@@ -147,7 +146,7 @@ def format_duration(seconds):
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_facilities_from_osm(lat, lon, tags, radius=3000, retries=3):
     overpass_url = "http://overpass-api.de/api/interpreter"
-    headers = {'User-Agent': 'HomeFitAgent/20.0'}
+    headers = {'User-Agent': 'HomeFitAgent/22.0'}
     tag_str = "".join([f'["{k}"="{v}"]' for k, v in tags.items()])
     overpass_query = f"[out:json][timeout:25];(node{tag_str}(around:{radius},{lat},{lon});way{tag_str}(around:{radius},{lat},{lon});relation{tag_str}(around:{radius},{lat},{lon}););out center;"
     
@@ -228,7 +227,7 @@ def home_fit_agent_decision(user_lat, user_lon, selected_categories):
 
 def generate_agent_interpretation(final_score, details, lang="TR"):
     if not details or llm_model is None:
-        return "LLM API Key eksik, uygun model bulunamadı veya analiz sonucu üretilemedi." if lang == "TR" else "LLM API Key missing, model not found, or no analysis results."
+        return "LLM API Key eksik, yapılandırma hatalı veya analiz sonucu üretilemedi." if lang == "TR" else "LLM API Key missing, config error, or no analysis results."
 
     raw_data = f"Genel Skor: {final_score}/100\n"
     for cat, data in details.items():
@@ -285,7 +284,6 @@ with col2:
 
 t = LANG[selected_lang]
 
-# DEĞİŞİKLİK: llm_yorum değişkenini en başta session state'e ekliyoruz
 if 'analysis_results' not in st.session_state: st.session_state.analysis_results = None
 if 'llm_yorum' not in st.session_state: st.session_state.llm_yorum = None
 if 'user_lat' not in st.session_state: st.session_state.user_lat = 41.1044
@@ -315,7 +313,7 @@ with st.expander(t["search_title"], expanded=True):
             selected_loc = st.session_state.address_options[selected_address_name]
             st.session_state.user_lat, st.session_state.user_lon = selected_loc.latitude, selected_loc.longitude
             st.session_state.analysis_results = None
-            st.session_state.llm_yorum = None # Konum değişince LLM yorumunu sil
+            st.session_state.llm_yorum = None 
             st.session_state.address_options = None 
             st.session_state.loc_method = "search"
             st.rerun()
@@ -341,7 +339,16 @@ def render_pref(label_en, label_tr, base_tags=None, opts_dict=None):
             
     st.sidebar.markdown("<hr style='margin: 10px 0; border-top: 1px dashed #333;'>", unsafe_allow_html=True)
 
-# YENİ TASARIM: Sadece mekansal analiz yapar, LLM çağırmaz!
+# İŞTE BURAYI YANLIŞLIKLA SİLMİŞTİM! (Seçenekler Geri Döndü)
+render_pref("Hospital", "Hastane", base_tags={"amenity": "hospital"})
+render_pref("Pharmacy", "Eczane", base_tags={"amenity": "pharmacy"})
+render_pref("Veterinary", "Veteriner", base_tags={"amenity": "veterinary"})
+render_pref("Supermarket", "Market", base_tags={"shop": "supermarket"})
+render_pref("Park", "Park", base_tags={"leisure": "park"})
+render_pref("Public Transit", "Toplu Taşıma", opts_dict={"Bus / Otobüs": {"highway": "bus_stop"}, "Metro / Subway": {"station": "subway"}, "Tram / Tramvay": {"railway": "tram_stop"}})
+render_pref("School", "Okul", opts_dict={"Kindergarten / Anaokulu": {"amenity": "kindergarten"}, "Primary / İlkokul": {"amenity": "school", "school": "primary"}, "Middle / Ortaokul": {"amenity": "school", "school": "secondary"}, "High / Lise": {"amenity": "school"}})
+render_pref("Worship", "İbadethane", opts_dict={"Mosque / Cami": {"amenity": "place_of_worship", "religion": "muslim"}, "Church / Kilise": {"amenity": "place_of_worship", "religion": "christian"}, "Synagogue / Sinagog": {"amenity": "place_of_worship", "religion": "jewish"}, "Cemevi": {"amenity": "place_of_worship", "religion": "alevi"}})
+
 if st.sidebar.button(t["run_btn"], use_container_width=True):
     if not selected_prefs: st.sidebar.error(t["err_no_cat"])
     else:
@@ -352,7 +359,6 @@ if st.sidebar.button(t["run_btn"], use_container_width=True):
                 "details": details, 
                 "selected_prefs": selected_prefs
             }
-            # Yeni analiz yapıldığında eski AI yorumunu sıfırlıyoruz
             st.session_state.llm_yorum = None
 
 # ----------------- MAIN LAYOUT -----------------
@@ -418,16 +424,14 @@ with col_res:
         st.markdown("---")
         st.markdown(t["interp_title"])
         
-        # Eğer LLM daha önce çalıştırıldıysa sonucu göster
         if st.session_state.llm_yorum:
             st.info(st.session_state.llm_yorum)
         else:
-            # Eğer henüz LLM çalıştırılmadıysa, butonu göster
             if st.button(t["ask_ai_btn"], use_container_width=True):
                 with st.spinner(t["ai_spin"]):
                     yorum = generate_agent_interpretation(res["score"], res["details"], selected_lang)
                     st.session_state.llm_yorum = yorum
-                    st.rerun() # Sayfayı yenileyip butonu gizleyerek yorumu ekrana basar
+                    st.rerun() 
         
         st.markdown(t["log_title"])
         with st.expander("🔍 View Process Log", expanded=False):
@@ -437,7 +441,6 @@ with col_res:
         # ==========================================
         # GÖRSEL RAPOR ÇIKTISI ALMA (HTML)
         # ==========================================
-        # AI yorumu varsa HTML'e ekle, yoksa boş bırak
         ai_html_box = ""
         if st.session_state.llm_yorum:
             ai_html_box = f"""
