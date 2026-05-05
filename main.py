@@ -212,7 +212,8 @@ def home_fit_agent_decision(user_lat, user_lon, selected_categories):
 # LLM AYARLARI (Streamlit Secrets'tan API Key'i çeker)
 try:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    llm_model = genai.GenerativeModel('gemini-1.5-flash-latest')
+    # Tüm API sürümlerinde %100 desteklenen, en stabil modeli kullanıyoruz
+    llm_model = genai.GenerativeModel('gemini-pro') 
 except:
     llm_model = None # Eğer API key girilmemişse sistem çökmesin diye koruma
 
