@@ -209,17 +209,29 @@ def home_fit_agent_decision(user_lat, user_lon, selected_categories):
     final_score = total_weighted_score / total_weight if total_weight > 0 else 0
     return round(max(0, final_score), 2), results
 
-# LLM AYARLARI (Streamlit Secrets'tan API Key'i çeker)
+# ==========================================
+# LLM AYARLARI (OTOMATİK MODEL KEŞFİ İLE)
+# ==========================================
 try:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    # Tüm API sürümlerinde %100 desteklenen, en stabil modeli kullanıyoruz
-    llm_model = genai.GenerativeModel('gemini-pro') 
-except:
-    llm_model = None # Eğer API key girilmemişse sistem çökmesin diye koruma
+    
+    # Desteklenen modelleri API'den canlı olarak çek
+    available_models = []
+    for m in genai.list_models():
+        if 'generateContent' in m.supported_generation_methods:
+            available_models.append(m.name)
+            
+    # Eğer model bulunduysa, tercihen içinde 'flash' veya 'pro' geçeni seç, yoksa ilkini al
+    if available_models:
+        # Önce flash modelini arar, yoksa listeye gelen ilk modeli zorunlu olarak seçer
+        chosen_model_name = next((m for m in available_models if 'flash' in m), available_models[0])
+        llm_model = genai.GenerativeModel(chosen_model_name)
+    else:
+        llm_model = None
 
-def generate_agent_interpretation(final_score, details, lang="TR"):
-    if not details or llm_model is None:
-        return "LLM API Key eksik veya analiz sonucu üretilemedi." if lang == "TR" else "LLM API Key missing or no analysis results."
+except Exception as e:
+    llm_model = None
+    print(f"GenAI Config Error: {e}")
 
     # Ajanın anladığı verileri saf metne çeviriyoruz (Prompt için)
     raw_data = f"Genel Skor: {final_score}/100\n"
