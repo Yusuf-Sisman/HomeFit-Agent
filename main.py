@@ -40,7 +40,7 @@ LANG = {
         "legend": "❌ Ignore &nbsp;&nbsp;|&nbsp;&nbsp; ➖ Normal &nbsp;&nbsp;|&nbsp;&nbsp; ⭐ Crucial",
         "run_btn": "🚀 Run GeoAI Analysis",
         "err_no_cat": "Please select at least one facility!",
-        "spin_msg": "Agent is executing spatial analysis and reasoning...",
+        "spin_msg": "Agent is executing spatial analysis...",
         "map_title": "### Interactive Map",
         "target_home": "Target Home",
         "report_title": "### 🤖 Agent Report",
@@ -57,7 +57,9 @@ LANG = {
         "interp_title": "### 🧠 AI Agent Interpretation",
         "log_title": "### 📜 Agent Decision Log",
         "warn_search": "⚠️ Map is centered on the street. For exact results, please click on your specific building on the map!",
-        "succ_click": "✅ Exact building location verified."
+        "succ_click": "✅ Exact building location verified.",
+        "ask_ai_btn": "🤖 Ask AI to Interpret",
+        "ai_spin": "AI is analyzing the results..."
     },
     "TR": {
         "title": "🏠 HomeFit Ajanı",
@@ -72,7 +74,7 @@ LANG = {
         "legend": "❌ Yok Say &nbsp;&nbsp;|&nbsp;&nbsp; ➖ Normal &nbsp;&nbsp;|&nbsp;&nbsp; ⭐ Çok Önemli",
         "run_btn": "🚀 GeoAI Analizini Başlat",
         "err_no_cat": "Lütfen en az bir tesis türü seçin!",
-        "spin_msg": "Ajan mekansal analizi ve yorumlamayı yürütüyor...",
+        "spin_msg": "Ajan mekansal analizi yürütüyor...",
         "map_title": "### İnteraktif Harita",
         "target_home": "Hedef Ev",
         "report_title": "### 🤖 Ajan Raporu",
@@ -89,28 +91,27 @@ LANG = {
         "interp_title": "### 🧠 Yapay Zeka Ajanı Yorumu",
         "log_title": "### 📜 Ajan Karar Günlüğü",
         "warn_search": "⚠️ Harita sokak merkezine odaklandı. Kesin sonuç için lütfen haritadan tam binanızın üzerine tıklayın!",
-        "succ_click": "✅ Bina konumu doğrulandı."
+        "succ_click": "✅ Bina konumu doğrulandı.",
+        "ask_ai_btn": "🤖 Yapay Zeka ile Yorumla",
+        "ai_spin": "Yapay Zeka sonuçları yorumluyor..."
     }
 }
 
 # ==========================================
-# LLM AYARLARI (HAFIZALI OTOMATİK MODEL KEŞFİ)
+# LLM AYARLARI (DOĞRUDAN GEMINI 2.5 FLASH)
 # ==========================================
 @st.cache_resource(show_spinner=False)
 def init_llm_model():
     try:
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        # Modelleri sadece uygulama ilk açıldığında 1 kere listeler ve hafızaya yazar!
-        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        if available_models:
-            chosen_model_name = next((m for m in available_models if 'flash' in m), available_models[0])
-            return genai.GenerativeModel(chosen_model_name)
-        return None
+        # Model arama/listeleme kaldırıldı. Doğrudan 2.5 Flash kullanılıyor.
+        return genai.GenerativeModel('gemini-2.5-flash')
     except Exception as e:
         print(f"GenAI Config Error: {e}")
         return None
 
 llm_model = init_llm_model()
+
 # ==========================================
 # HELPER FUNCTIONS
 # ==========================================
@@ -146,7 +147,7 @@ def format_duration(seconds):
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_facilities_from_osm(lat, lon, tags, radius=3000, retries=3):
     overpass_url = "http://overpass-api.de/api/interpreter"
-    headers = {'User-Agent': 'HomeFitAgent/19.0'}
+    headers = {'User-Agent': 'HomeFitAgent/20.0'}
     tag_str = "".join([f'["{k}"="{v}"]' for k, v in tags.items()])
     overpass_query = f"[out:json][timeout:25];(node{tag_str}(around:{radius},{lat},{lon});way{tag_str}(around:{radius},{lat},{lon});relation{tag_str}(around:{radius},{lat},{lon}););out center;"
     
@@ -284,7 +285,9 @@ with col2:
 
 t = LANG[selected_lang]
 
+# DEĞİŞİKLİK: llm_yorum değişkenini en başta session state'e ekliyoruz
 if 'analysis_results' not in st.session_state: st.session_state.analysis_results = None
+if 'llm_yorum' not in st.session_state: st.session_state.llm_yorum = None
 if 'user_lat' not in st.session_state: st.session_state.user_lat = 41.1044
 if 'user_lon' not in st.session_state: st.session_state.user_lon = 29.0284
 if 'address_options' not in st.session_state: st.session_state.address_options = None
@@ -312,6 +315,7 @@ with st.expander(t["search_title"], expanded=True):
             selected_loc = st.session_state.address_options[selected_address_name]
             st.session_state.user_lat, st.session_state.user_lon = selected_loc.latitude, selected_loc.longitude
             st.session_state.analysis_results = None
+            st.session_state.llm_yorum = None # Konum değişince LLM yorumunu sil
             st.session_state.address_options = None 
             st.session_state.loc_method = "search"
             st.rerun()
@@ -337,28 +341,19 @@ def render_pref(label_en, label_tr, base_tags=None, opts_dict=None):
             
     st.sidebar.markdown("<hr style='margin: 10px 0; border-top: 1px dashed #333;'>", unsafe_allow_html=True)
 
-render_pref("Hospital", "Hastane", base_tags={"amenity": "hospital"})
-render_pref("Pharmacy", "Eczane", base_tags={"amenity": "pharmacy"})
-render_pref("Veterinary", "Veteriner", base_tags={"amenity": "veterinary"})
-render_pref("Supermarket", "Market", base_tags={"shop": "supermarket"})
-render_pref("Park", "Park", base_tags={"leisure": "park"})
-render_pref("Public Transit", "Toplu Taşıma", opts_dict={"Bus / Otobüs": {"highway": "bus_stop"}, "Metro / Subway": {"station": "subway"}, "Tram / Tramvay": {"railway": "tram_stop"}})
-render_pref("School", "Okul", opts_dict={"Kindergarten / Anaokulu": {"amenity": "kindergarten"}, "Primary / İlkokul": {"amenity": "school", "school": "primary"}, "Middle / Ortaokul": {"amenity": "school", "school": "secondary"}, "High / Lise": {"amenity": "school"}})
-render_pref("Worship", "İbadethane", opts_dict={"Mosque / Cami": {"amenity": "place_of_worship", "religion": "muslim"}, "Church / Kilise": {"amenity": "place_of_worship", "religion": "christian"}, "Synagogue / Sinagog": {"amenity": "place_of_worship", "religion": "jewish"}, "Cemevi": {"amenity": "place_of_worship", "religion": "alevi"}})
-
-# KOTA KORUMASI: Yalnızca butona tıklandığında LLM çalışır ve hafızaya kaydedilir
+# YENİ TASARIM: Sadece mekansal analiz yapar, LLM çağırmaz!
 if st.sidebar.button(t["run_btn"], use_container_width=True):
     if not selected_prefs: st.sidebar.error(t["err_no_cat"])
     else:
         with st.spinner(t["spin_msg"]):
             score, details = home_fit_agent_decision(st.session_state.user_lat, st.session_state.user_lon, selected_prefs)
-            llm_yorum = generate_agent_interpretation(score, details, selected_lang)
             st.session_state.analysis_results = {
                 "score": score, 
                 "details": details, 
-                "selected_prefs": selected_prefs,
-                "llm_yorum": llm_yorum
+                "selected_prefs": selected_prefs
             }
+            # Yeni analiz yapıldığında eski AI yorumunu sıfırlıyoruz
+            st.session_state.llm_yorum = None
 
 # ----------------- MAIN LAYOUT -----------------
 col_map, col_res = st.columns([2, 3]) 
@@ -419,21 +414,39 @@ with col_res:
             
         st.dataframe(pd.DataFrame(df_data), column_config={t["col_score"]: st.column_config.ProgressColumn(t["col_score"], format="%d", min_value=0, max_value=100)}, hide_index=True, use_container_width=True)
         
-        # --- AGENT INTERPRETATION & LOGGING (HAFIZADAN OKUNUR) ---
-        agent_interp_text = res.get("llm_yorum", "LLM yanıtı hafızadan okunamadı.")
-        agent_log_text = generate_agent_decision_log(res["selected_prefs"], selected_lang)
-        
+        # --- AGENT INTERPRETATION & LOGGING (KULLANICI TETİKLEMELİ LLM) ---
         st.markdown("---")
         st.markdown(t["interp_title"])
-        st.info(agent_interp_text)
+        
+        # Eğer LLM daha önce çalıştırıldıysa sonucu göster
+        if st.session_state.llm_yorum:
+            st.info(st.session_state.llm_yorum)
+        else:
+            # Eğer henüz LLM çalıştırılmadıysa, butonu göster
+            if st.button(t["ask_ai_btn"], use_container_width=True):
+                with st.spinner(t["ai_spin"]):
+                    yorum = generate_agent_interpretation(res["score"], res["details"], selected_lang)
+                    st.session_state.llm_yorum = yorum
+                    st.rerun() # Sayfayı yenileyip butonu gizleyerek yorumu ekrana basar
         
         st.markdown(t["log_title"])
         with st.expander("🔍 View Process Log", expanded=False):
+            agent_log_text = generate_agent_decision_log(res["selected_prefs"], selected_lang)
             st.markdown(agent_log_text)
             
         # ==========================================
         # GÖRSEL RAPOR ÇIKTISI ALMA (HTML)
         # ==========================================
+        # AI yorumu varsa HTML'e ekle, yoksa boş bırak
+        ai_html_box = ""
+        if st.session_state.llm_yorum:
+            ai_html_box = f"""
+            <div class="agent-box">
+                <h3 style="margin-top:0;">🧠 AI Agent Interpretation</h3>
+                <p>{md_to_html(st.session_state.llm_yorum)}</p>
+            </div>
+            """
+
         html_content = f"""
         <html>
         <head>
@@ -460,10 +473,7 @@ with col_res:
                 <h2>{t['title']} - Visual Report</h2>
                 <div class="score-box">Final Location Score: {res['score']} / 100</div>
                 
-                <div class="agent-box">
-                    <h3 style="margin-top:0;">🧠 AI Agent Interpretation</h3>
-                    <p>{md_to_html(agent_interp_text)}</p>
-                </div>
+                {ai_html_box}
 
                 <div class="content-wrapper">
                     <div class="map-container">
@@ -495,6 +505,7 @@ with col_res:
         with b2:
             if st.button(t["new_search_btn"], use_container_width=True):
                 st.session_state.analysis_results = None
+                st.session_state.llm_yorum = None
                 st.rerun()
     else:
         st.info(t["prompt_select"])
