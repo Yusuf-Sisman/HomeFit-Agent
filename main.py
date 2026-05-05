@@ -4,11 +4,11 @@ import folium
 from streamlit_folium import st_folium
 from geopy.distance import geodesic
 from geopy.geocoders import Nominatim
-import google.generativeai as genai
 import pandas as pd
 import concurrent.futures
 import time
 import re
+import google.generativeai as genai
 
 # ==========================================
 # UI & CSS CONFIGURATION
@@ -40,7 +40,7 @@ LANG = {
         "legend": "❌ Ignore &nbsp;&nbsp;|&nbsp;&nbsp; ➖ Normal &nbsp;&nbsp;|&nbsp;&nbsp; ⭐ Crucial",
         "run_btn": "🚀 Run GeoAI Analysis",
         "err_no_cat": "Please select at least one facility!",
-        "spin_msg": "Agent is executing spatial analysis...",
+        "spin_msg": "Agent is executing spatial analysis and reasoning...",
         "map_title": "### Interactive Map",
         "target_home": "Target Home",
         "report_title": "### 🤖 Agent Report",
@@ -54,7 +54,7 @@ LANG = {
         "prompt_select": "Set your preferences on the left and click **Run GeoAI Analysis**.",
         "col_fac": "Facility",
         "col_score": "Suitability",
-        "interp_title": "### 🧠 Agent Interpretation",
+        "interp_title": "### 🧠 AI Agent Interpretation",
         "log_title": "### 📜 Agent Decision Log",
         "warn_search": "⚠️ Map is centered on the street. For exact results, please click on your specific building on the map!",
         "succ_click": "✅ Exact building location verified."
@@ -72,7 +72,7 @@ LANG = {
         "legend": "❌ Yok Say &nbsp;&nbsp;|&nbsp;&nbsp; ➖ Normal &nbsp;&nbsp;|&nbsp;&nbsp; ⭐ Çok Önemli",
         "run_btn": "🚀 GeoAI Analizini Başlat",
         "err_no_cat": "Lütfen en az bir tesis türü seçin!",
-        "spin_msg": "Ajan mekansal analizi yürütüyor...",
+        "spin_msg": "Ajan mekansal analizi ve yorumlamayı yürütüyor...",
         "map_title": "### İnteraktif Harita",
         "target_home": "Hedef Ev",
         "report_title": "### 🤖 Ajan Raporu",
@@ -86,7 +86,7 @@ LANG = {
         "prompt_select": "Soldan tercihlerinizi ayarlayın ve **GeoAI Analizini Başlat** butonuna tıklayın.",
         "col_fac": "Tesis",
         "col_score": "Uygunluk",
-        "interp_title": "### 🧠 Ajan Yorumu",
+        "interp_title": "### 🧠 Yapay Zeka Ajanı Yorumu",
         "log_title": "### 📜 Ajan Karar Günlüğü",
         "warn_search": "⚠️ Harita sokak merkezine odaklandı. Kesin sonuç için lütfen haritadan tam binanızın üzerine tıklayın!",
         "succ_click": "✅ Bina konumu doğrulandı."
@@ -94,10 +94,24 @@ LANG = {
 }
 
 # ==========================================
+# LLM AYARLARI (OTOMATİK MODEL KEŞFİ İLE)
+# ==========================================
+try:
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+    if available_models:
+        chosen_model_name = next((m for m in available_models if 'flash' in m), available_models[0])
+        llm_model = genai.GenerativeModel(chosen_model_name)
+    else:
+        llm_model = None
+except Exception as e:
+    llm_model = None
+    print(f"GenAI Config Error: {e}")
+
+# ==========================================
 # HELPER FUNCTIONS
 # ==========================================
 def md_to_html(text):
-    """HTML rapor için basit markdown çevirici"""
     text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
     return text.replace("\n", "<br>")
 
@@ -129,7 +143,7 @@ def format_duration(seconds):
 @st.cache_data(ttl=3600, show_spinner=False)
 def get_facilities_from_osm(lat, lon, tags, radius=3000, retries=3):
     overpass_url = "http://overpass-api.de/api/interpreter"
-    headers = {'User-Agent': 'HomeFitAgent/18.0'}
+    headers = {'User-Agent': 'HomeFitAgent/19.0'}
     tag_str = "".join([f'["{k}"="{v}"]' for k, v in tags.items()])
     overpass_query = f"[out:json][timeout:25];(node{tag_str}(around:{radius},{lat},{lon});way{tag_str}(around:{radius},{lat},{lon});relation{tag_str}(around:{radius},{lat},{lon}););out center;"
     
@@ -194,43 +208,6 @@ def get_score_from_distance(distance):
 # MODULE 4: SCORING & RECOMMENDATION ENGINE
 # ==========================================
 def home_fit_agent_decision(user_lat, user_lon, selected_categories):
-    # Yuvarlama iptal edildi, tam lokasyon ile hesaplanıyor
-    results = {}
-    total_weighted_score, total_weight = 0, 0
-    
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-        futures = [executor.submit(process_single_category, c_name, info, user_lat, user_lon) for c_name, info in selected_categories.items()]
-        for future in concurrent.futures.as_completed(futures):
-            cat_name, score, weight, nearest_coord, metrics = future.result()
-            total_weighted_score += (score * weight)
-            total_weight += weight
-            results[cat_name] = {"score": score, "nearest": nearest_coord, "metrics": metrics}
-            
-    final_score = total_weighted_score / total_weight if total_weight > 0 else 0
-    return round(max(0, final_score), 2), results
-# ==========================================
-# LLM AYARLARI (OTOMATİK MODEL KEŞFİ İLE)
-# ==========================================
-try:
-    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-    
-    # Desteklenen modelleri API'den canlı olarak çek
-    available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-            
-    # Eğer model bulunduysa, tercihen içinde 'flash' geçeni seç, yoksa ilkini al
-    if available_models:
-        chosen_model_name = next((m for m in available_models if 'flash' in m), available_models[0])
-        llm_model = genai.GenerativeModel(chosen_model_name)
-    else:
-        llm_model = None
-except Exception as e:
-    llm_model = None
-    print(f"GenAI Config Error: {e}")
-
-# ==========================================
-# MODULE 4: SCORING & RECOMMENDATION ENGINE
-# ==========================================
-def home_fit_agent_decision(user_lat, user_lon, selected_categories):
     results = {}
     total_weighted_score, total_weight = 0, 0
     
@@ -249,13 +226,11 @@ def generate_agent_interpretation(final_score, details, lang="TR"):
     if not details or llm_model is None:
         return "LLM API Key eksik, uygun model bulunamadı veya analiz sonucu üretilemedi." if lang == "TR" else "LLM API Key missing, model not found, or no analysis results."
 
-    # Ajanın anladığı verileri saf metne çeviriyoruz (Prompt için)
     raw_data = f"Genel Skor: {final_score}/100\n"
     for cat, data in details.items():
         if data['metrics']:
             raw_data += f"- {cat}: Puanı {max(0, data['score'])}, Yürüme: {data['metrics']['walk_d']}m, Araç: {data['metrics']['drive_d']}m\n"
 
-    # LLM için Prompt (Sistem Yönergesi) Hazırlıyoruz
     if lang == "TR":
         prompt = f"""
         Sen uzman bir gayrimenkul, şehir planlama ve coğrafi bilgi sistemleri (GIS) asistanısın. 
@@ -281,12 +256,12 @@ def generate_agent_interpretation(final_score, details, lang="TR"):
         3. Add a 1-sentence final verdict/recommendation at the end.
         """
 
-    # Gemini'ye soruyu sor ve cevabı al
     try:
         response = llm_model.generate_content(prompt)
         return response.text
     except Exception as e:
         return f"LLM Yanıt veremedi. Hata: {e}"
+
 def generate_agent_decision_log(selected_categories, lang="EN"):
     selected_count = len(selected_categories)
     crucial = [cat for cat, info in selected_categories.items() if info["weight"] == 2]
@@ -368,17 +343,23 @@ render_pref("Public Transit", "Toplu Taşıma", opts_dict={"Bus / Otobüs": {"hi
 render_pref("School", "Okul", opts_dict={"Kindergarten / Anaokulu": {"amenity": "kindergarten"}, "Primary / İlkokul": {"amenity": "school", "school": "primary"}, "Middle / Ortaokul": {"amenity": "school", "school": "secondary"}, "High / Lise": {"amenity": "school"}})
 render_pref("Worship", "İbadethane", opts_dict={"Mosque / Cami": {"amenity": "place_of_worship", "religion": "muslim"}, "Church / Kilise": {"amenity": "place_of_worship", "religion": "christian"}, "Synagogue / Sinagog": {"amenity": "place_of_worship", "religion": "jewish"}, "Cemevi": {"amenity": "place_of_worship", "religion": "alevi"}})
 
+# KOTA KORUMASI: Yalnızca butona tıklandığında LLM çalışır ve hafızaya kaydedilir
 if st.sidebar.button(t["run_btn"], use_container_width=True):
     if not selected_prefs: st.sidebar.error(t["err_no_cat"])
     else:
         with st.spinner(t["spin_msg"]):
             score, details = home_fit_agent_decision(st.session_state.user_lat, st.session_state.user_lon, selected_prefs)
-            st.session_state.analysis_results = {"score": score, "details": details, "selected_prefs": selected_prefs}
+            llm_yorum = generate_agent_interpretation(score, details, selected_lang)
+            st.session_state.analysis_results = {
+                "score": score, 
+                "details": details, 
+                "selected_prefs": selected_prefs,
+                "llm_yorum": llm_yorum
+            }
 
 # ----------------- MAIN LAYOUT -----------------
 col_map, col_res = st.columns([2, 3]) 
 
-# UI TEŞVİK MESAJLARI (Arama sonrası veya Tıklama sonrası)
 if st.session_state.loc_method == "search":
     st.warning(t["warn_search"])
 elif st.session_state.loc_method == "map_click":
@@ -435,8 +416,8 @@ with col_res:
             
         st.dataframe(pd.DataFrame(df_data), column_config={t["col_score"]: st.column_config.ProgressColumn(t["col_score"], format="%d", min_value=0, max_value=100)}, hide_index=True, use_container_width=True)
         
-        # --- AGENT INTERPRETATION & LOGGING ---
-        agent_interp_text = generate_agent_interpretation(res["score"], res["details"], selected_lang)
+        # --- AGENT INTERPRETATION & LOGGING (HAFIZADAN OKUNUR) ---
+        agent_interp_text = res.get("llm_yorum", "LLM yanıtı hafızadan okunamadı.")
         agent_log_text = generate_agent_decision_log(res["selected_prefs"], selected_lang)
         
         st.markdown("---")
@@ -449,7 +430,6 @@ with col_res:
             
         # ==========================================
         # GÖRSEL RAPOR ÇIKTISI ALMA (HTML)
-        # HTML içine Agent Yorumu ve Log eklendi
         # ==========================================
         html_content = f"""
         <html>
@@ -478,7 +458,7 @@ with col_res:
                 <div class="score-box">Final Location Score: {res['score']} / 100</div>
                 
                 <div class="agent-box">
-                    <h3 style="margin-top:0;">🧠 Agent Interpretation</h3>
+                    <h3 style="margin-top:0;">🧠 AI Agent Interpretation</h3>
                     <p>{md_to_html(agent_interp_text)}</p>
                 </div>
 
