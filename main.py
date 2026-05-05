@@ -4,6 +4,7 @@ import folium
 from streamlit_folium import st_folium
 from geopy.distance import geodesic
 from geopy.geocoders import Nominatim
+import google.generativeai as genai
 import pandas as pd
 import concurrent.futures
 import time
@@ -208,40 +209,55 @@ def home_fit_agent_decision(user_lat, user_lon, selected_categories):
     final_score = total_weighted_score / total_weight if total_weight > 0 else 0
     return round(max(0, final_score), 2), results
 
-def generate_agent_interpretation(final_score, details, lang="EN"):
-    if not details: return "No analysis results were generated." if lang == "EN" else "Analiz sonucu üretilemedi."
+# LLM AYARLARI (Streamlit Secrets'tan API Key'i çeker)
+try:
+    genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+    llm_model = genai.GenerativeModel('gemini-1.5-flash')
+except:
+    llm_model = None # Eğer API key girilmemişse sistem çökmesin diye koruma
 
-    if final_score >= 80: s_class = "highly suitable" if lang == "EN" else "yüksek oranda uygun"
-    elif final_score >= 60: s_class = "moderately suitable" if lang == "EN" else "orta derecede uygun"
-    elif final_score >= 40: s_class = "partially suitable" if lang == "EN" else "kısmen uygun"
-    else: s_class = "poorly suitable" if lang == "EN" else "düşük oranda uygun"
+def generate_agent_interpretation(final_score, details, lang="TR"):
+    if not details or llm_model is None:
+        return "LLM API Key eksik veya analiz sonucu üretilemedi." if lang == "TR" else "LLM API Key missing or no analysis results."
 
-    valid_items = {cat: data for cat, data in details.items() if data.get("score") is not None}
-    if not valid_items: return ""
+    # Ajanın anladığı verileri saf metne çeviriyoruz (Prompt için)
+    raw_data = f"Genel Skor: {final_score}/100\n"
+    for cat, data in details.items():
+        if data['metrics']:
+            raw_data += f"- {cat}: Puanı {max(0, data['score'])}, Yürüme: {data['metrics']['walk_d']}m, Araç: {data['metrics']['drive_d']}m\n"
 
-    best_cat, best_data = max(valid_items.items(), key=lambda x: x[1]["score"])
-    worst_cat, worst_data = min(valid_items.items(), key=lambda x: x[1]["score"])
-
-    best_distance = best_data["metrics"].get("walk_d") if best_data.get("metrics") else None
-    worst_distance = worst_data["metrics"].get("walk_d") if worst_data.get("metrics") else None
-
-    if lang == "EN":
-        interp = f"The selected address is **{s_class}** according to the user's selected preferences, with an overall HomeFit score of **{final_score}/100**.\n\n"
-        interp += f"The strongest accessibility category is **{best_cat}**, which received a score of **{max(0, best_data['score'])}/100**."
-        if best_distance: interp += f" The estimated walking distance to the nearest {best_cat} is approximately **{best_distance} meters**.\n\n"
-        interp += f"The weakest accessibility category is **{worst_cat}**, which received a score of **{max(0, worst_data['score'])}/100**."
-        if worst_distance: interp += f" The estimated walking distance to the nearest {worst_cat} is approximately **{worst_distance} meters**.\n\n"
-        interp += "The final score was calculated using a weighted preference model. Categories marked as crucial have a stronger influence on the final suitability score, while ignored categories are excluded from the analysis."
+    # LLM için Prompt (Sistem Yönergesi) Hazırlıyoruz
+    if lang == "TR":
+        prompt = f"""
+        Sen uzman bir gayrimenkul, şehir planlama ve coğrafi bilgi sistemleri (GIS) asistanısın. 
+        Müşterin bir ev konumu seçti ve aşağıdaki analiz verileri elde edildi:
+        
+        {raw_data}
+        
+        Görevlerin:
+        1. Bu verileri kullanarak müşteriye 2 veya 3 paragraflık, profesyonel ama samimi bir değerlendirme yaz.
+        2. Sadece sayıları tekrar etme; bu mesafelerin günlük yaşam kalitesini (yürüme kolaylığı, trafik, acil durumlar, sosyalleşme vb.) nasıl etkileyeceğini yorumla.
+        3. Metnin sonuna 1 cümlelik kısa bir genel özet (tavsiye) ekle.
+        """
     else:
-        interp = f"Seçilen adres, kullanıcının belirlediği tercihlere göre **{s_class}** olarak değerlendirilmiş olup, genel HomeFit skoru **{final_score}/100** olarak hesaplanmıştır.\n\n"
-        interp += f"Erişilebilirliği en güçlü olan kategori **{best_cat}** olup, **{max(0, best_data['score'])}/100** puan almıştır."
-        if best_distance: interp += f" En yakın {best_cat} için tahmini yürüme mesafesi yaklaşık **{best_distance} metre**dir.\n\n"
-        interp += f"Erişilebilirliği en zayıf olan kategori **{worst_cat}** olup, **{max(0, worst_data['score'])}/100** puan almıştır."
-        if worst_distance: interp += f" En yakın {worst_cat} için tahmini yürüme mesafesi yaklaşık **{worst_distance} metre**dir.\n\n"
-        interp += "Nihai skor, ağırlıklı bir tercih modeli kullanılarak hesaplanmıştır. Çok önemli (Crucial) olarak işaretlenen kategoriler nihai uygunluk skorunu daha güçlü etkilerken, yok sayılan kategoriler analizin dışında tutulmuştur."
+        prompt = f"""
+        You are an expert real estate, urban planning, and GIS AI assistant. 
+        Your client selected a home location and the following analysis data was generated:
+        
+        {raw_data}
+        
+        Tasks:
+        1. Write a 2 or 3 paragraph professional yet friendly evaluation for the client based on this data.
+        2. Do not just repeat numbers; interpret how these distances affect daily life quality (walkability, emergencies, socializing, etc.).
+        3. Add a 1-sentence final verdict/recommendation at the end.
+        """
 
-    return interp
-
+    # Gemini'ye soruyu sor ve cevabı al
+    try:
+        response = llm_model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        return f"LLM Yanıt veremedi. Hata: {e}"
 def generate_agent_decision_log(selected_categories, lang="EN"):
     selected_count = len(selected_categories)
     crucial = [cat for cat, info in selected_categories.items() if info["weight"] == 2]
