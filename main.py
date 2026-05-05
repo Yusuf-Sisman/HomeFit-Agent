@@ -208,7 +208,6 @@ def home_fit_agent_decision(user_lat, user_lon, selected_categories):
             
     final_score = total_weighted_score / total_weight if total_weight > 0 else 0
     return round(max(0, final_score), 2), results
-
 # ==========================================
 # LLM AYARLARI (OTOMATİK MODEL KEŞFİ İLE)
 # ==========================================
@@ -216,22 +215,39 @@ try:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
     
     # Desteklenen modelleri API'den canlı olarak çek
-    available_models = []
-    for m in genai.list_models():
-        if 'generateContent' in m.supported_generation_methods:
-            available_models.append(m.name)
+    available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
             
-    # Eğer model bulunduysa, tercihen içinde 'flash' veya 'pro' geçeni seç, yoksa ilkini al
+    # Eğer model bulunduysa, tercihen içinde 'flash' geçeni seç, yoksa ilkini al
     if available_models:
-        # Önce flash modelini arar, yoksa listeye gelen ilk modeli zorunlu olarak seçer
         chosen_model_name = next((m for m in available_models if 'flash' in m), available_models[0])
         llm_model = genai.GenerativeModel(chosen_model_name)
     else:
         llm_model = None
-
 except Exception as e:
     llm_model = None
     print(f"GenAI Config Error: {e}")
+
+# ==========================================
+# MODULE 4: SCORING & RECOMMENDATION ENGINE
+# ==========================================
+def home_fit_agent_decision(user_lat, user_lon, selected_categories):
+    results = {}
+    total_weighted_score, total_weight = 0, 0
+    
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(process_single_category, c_name, info, user_lat, user_lon) for c_name, info in selected_categories.items()]
+        for future in concurrent.futures.as_completed(futures):
+            cat_name, score, weight, nearest_coord, metrics = future.result()
+            total_weighted_score += (score * weight)
+            total_weight += weight
+            results[cat_name] = {"score": score, "nearest": nearest_coord, "metrics": metrics}
+            
+    final_score = total_weighted_score / total_weight if total_weight > 0 else 0
+    return round(max(0, final_score), 2), results
+
+def generate_agent_interpretation(final_score, details, lang="TR"):
+    if not details or llm_model is None:
+        return "LLM API Key eksik, uygun model bulunamadı veya analiz sonucu üretilemedi." if lang == "TR" else "LLM API Key missing, model not found, or no analysis results."
 
     # Ajanın anladığı verileri saf metne çeviriyoruz (Prompt için)
     raw_data = f"Genel Skor: {final_score}/100\n"
