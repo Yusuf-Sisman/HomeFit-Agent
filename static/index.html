@@ -147,7 +147,7 @@
 <script>
     let curLang = "TR";
     let lastData = null; 
-    let isMapLocked = false; // HARİTA KİLİDİ DURUMU
+    let isMapLocked = false; 
 
     const LANG = {
         "TR": {
@@ -307,7 +307,7 @@
     });
 
     function setHome(lat, lon) {
-        if(isMapLocked) return; // Harita kilitliyse yeni konum seçtirme
+        if(isMapLocked) return; 
         curLat = parseFloat(lat); curLng = parseFloat(lon);
         if(homeMarker) map.removeLayer(homeMarker);
         
@@ -338,9 +338,9 @@
         document.getElementById('btn-reset').style.display = 'none';
         document.getElementById('address-input').disabled = false;
         
-        if(homeMarker) homeMarker.dragging.enable(); // Sürüklemeyi tekrar aç
-        resetUI(); // Tabloları gizle, çizgileri temizle
-        map.setView([curLat, curLng], 15); // Sadece eve odaklan
+        if(homeMarker) homeMarker.dragging.enable(); 
+        resetUI(); 
+        map.setView([curLat, curLng], 15);
     }
 
     // ==========================================
