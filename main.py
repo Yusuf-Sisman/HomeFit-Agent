@@ -166,7 +166,7 @@ async def analyze_location(req: AnalyzeRequest):
 @app.post("/api/interpret")
 async def get_ai_interpretation(req: dict):
     if not ai_client:
-        return {"interpretation": "LLM Ayarları eksik / API Anahtarı hatalı."}
+        return {"interpretation": "LLM Ayarları eksik veya API Anahtarı hatalı."}
 
     final_score = req.get("final_score", 0)
     details = req.get("details", {})
@@ -195,15 +195,25 @@ async def get_ai_interpretation(req: dict):
         2. Interpret how these distances affect daily life quality.
         3. Add a 1-sentence final verdict at the end. Use plain text.
         """
-
-    try:
-        response = ai_client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=prompt
-        )
-        return {"interpretation": response.text}
-    except Exception as e:
-        return {"interpretation": f"Yapay Zeka Hatası: {e}"}
+# --- HATA YÖNETİMİ VE YENİDEN DENEME ---
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            response = ai_client.models.generate_content(
+                model='gemini-1.5-flash', # 2.0 veya 2.5 yerine 1.5 daha stabildir
+                contents=prompt
+            )
+            return {"interpretation": response.text}
+        
+        except Exception as e:
+            # Eğer hata 503 (Yoğunluk) veya 429 (Çok fazla istek) ise bekle ve tekrar dene
+            if "503" in str(e) or "429" in str(e):
+                if attempt < max_retries - 1:
+                    time.sleep(3) # 3 saniye bekle
+                    continue
+            
+            return {"interpretation": f"Yapay Zeka şu an çok yoğun. Lütfen birkaç dakika sonra tekrar deneyin. (Hata: {e})"}
+    
 
 if __name__ == "__main__":
     import uvicorn
