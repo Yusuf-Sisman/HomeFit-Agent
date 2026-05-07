@@ -11,8 +11,17 @@ from google import genai
 # ==========================================
 # 1. YAPAY ZEKA VE API AYARLARI
 # ==========================================
-# GERÇEK GEMINI API ANAHTARINI BURAYA YAZ (Tırnaklar kalacak)
-GEMINI_API_KEY = "AIzaSyC2ztUnaQfB9u0drAeXsAGhu7-Oh99VRjA" 
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") 
+
+try:
+    if not GEMINI_API_KEY:
+        print("KRİTİK HATA: API Anahtarı bulunamadı!")
+        ai_client = None
+    else:
+        ai_client = genai.Client(api_key=GEMINI_API_KEY)
+except Exception as e:
+    print(f"GenAI Config Error: {e}")
+    ai_client = None
 
 try:
     ai_client = genai.Client(api_key=GEMINI_API_KEY)
