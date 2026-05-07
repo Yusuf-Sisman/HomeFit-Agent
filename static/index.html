@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HomeFit Pro Agent</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background-color: #f1f5f9; color: #334155; }
+        .container { display: flex; height: 100vh; }
+        
+        /* SOL MENÜ */
+        .sidebar { width: 400px; background: white; padding: 25px; overflow-y: auto; border-right: 1px solid #e2e8f0; box-shadow: 2px 0 10px rgba(0,0,0,0.05); }
+        .sidebar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .sidebar h2 { margin: 0; color: #1e293b; font-size: 22px; font-weight: 800; }
+        
+        .lang-switch { display: flex; background: #e2e8f0; border-radius: 6px; overflow: hidden; }
+        .lang-switch button { flex: 1; background: transparent; border: none; padding: 6px 12px; cursor: pointer; font-weight: bold; font-size: 12px; color: #64748b; transition: 0.3s; }
+        .lang-switch button.active { background: #2563eb; color: white; }
+
+        /* Arama Çubuğu */
+        .search-container { position: relative; margin-bottom: 20px; }
+        .search-box { display: flex; gap: 8px; }
+        .search-box input { flex: 1; padding: 10px 15px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; outline: none; transition: 0.2s; }
+        .search-box input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
+        .search-box button { padding: 10px 15px; background: #1e293b; color: white; border: none; border-radius: 8px; cursor: pointer; transition: 0.2s; }
+        
+        .suggestions { position: absolute; top: 100%; left: 0; right: 45px; background: white; border: 1px solid #cbd5e1; border-top: none; border-radius: 0 0 8px 8px; max-height: 200px; overflow-y: auto; z-index: 1000; display: none; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-top: 2px; }
+        .sugg-item { padding: 10px; font-size: 13px; cursor: pointer; border-bottom: 1px solid #f1f5f9; }
+        .sugg-item:hover { background: #f8fafc; color: #2563eb; font-weight: bold; }
+
+        .legend { background: #1e293b; color: white; padding: 10px; border-radius: 8px; font-size: 13px; text-align: center; margin-bottom: 20px; font-weight: 500;}
+        
+        /* Tercihler Listesi */
+        .pref-item { margin-bottom: 15px; border-bottom: 1px dashed #cbd5e1; padding-bottom: 12px; }
+        .pref-main { display: flex; justify-content: space-between; align-items: center; }
+        .pref-label { font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+        
+        .sub-options { margin-top: 10px; padding-left: 10px; font-size: 13px; display: flex; flex-wrap: wrap; gap: 8px; display: none; }
+        .sub-options label { background: #f8fafc; padding: 4px 10px; border-radius: 6px; border: 1px solid #cbd5e1; cursor: pointer; transition: 0.2s; user-select: none; }
+        .sub-options label:hover { background: #e2e8f0; }
+        .sub-options input[type="checkbox"] { margin-right: 5px; cursor: pointer; }
+
+        .radio-group { display: flex; gap: 4px; }
+        .radio-group label { cursor: pointer; padding: 5px 10px; border-radius: 6px; font-size: 13px; transition: all 0.2s; background: #f1f5f9; border: 1px solid #cbd5e1; }
+        .radio-group input { display: none; }
+        .radio-group input:checked + label { background: #2563eb; color: white; border-color: #1d4ed8; font-weight: bold; transform: translateY(-1px); box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2); }
+
+        .btn-run { width: 100%; background: #2563eb; color: white; border: none; padding: 15px; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; transition: 0.2s; box-shadow: 0 4px 6px rgba(37, 99, 235, 0.2); }
+        .btn-run:hover:not(:disabled) { background: #1d4ed8; transform: translateY(-1px); }
+        .btn-run:disabled { background: #94a3b8; cursor: not-allowed; box-shadow: none; transform: none; }
+        
+        /* Yeni Araştırma Butonu */
+        .btn-reset { width: 100%; background: #ef4444; color: white; border: none; padding: 15px; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; transition: 0.2s; box-shadow: 0 4px 6px rgba(239, 68, 68, 0.2); display: none; }
+        .btn-reset:hover { background: #dc2626; transform: translateY(-1px); }
+
+        /* ANA İÇERİK */
+        .main-content { flex: 1; display: flex; flex-direction: column; padding: 25px; gap: 20px; overflow-y: auto; }
+        .map-container { height: 45vh; min-height: 350px; width: 100%; border-radius: 12px; overflow: hidden; border: 2px solid #e2e8f0; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+        #map { width: 100%; height: 100%; z-index: 1; }
+        
+        /* ÖZEL HARİTA PİNLERİ (CSS) */
+        .home-marker { background: #1e293b; border: 2px solid white; border-radius: 50%; text-align: center; line-height: 30px; font-size: 18px; box-shadow: 0 3px 6px rgba(0,0,0,0.4); display: flex; justify-content: center; align-items: center; }
+        .facility-marker { background: white; border: 2px solid #3b82f6; border-radius: 50%; text-align: center; line-height: 26px; font-size: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); display: flex; justify-content: center; align-items: center; transition: 0.2s; }
+        .facility-marker:hover { transform: scale(1.1); border-color: #2563eb; z-index: 1000 !important; }
+
+        .results-panel { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); display: none; }
+        .score-box { background: #f0fdf4; color: #166534; padding: 15px; border-radius: 8px; font-size: 24px; font-weight: 800; text-align: center; border: 1px solid #bbf7d0; margin-bottom: 20px; }
+        
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        th, td { border: 1px solid #e2e8f0; padding: 12px 15px; text-align: left; font-size: 14px; }
+        th { background: #f8fafc; font-weight: 700; color: #475569; }
+        .progress-bg { background: #e2e8f0; border-radius: 6px; width: 100%; height: 22px; overflow: hidden; position: relative; }
+        .progress-fill { background: linear-gradient(90deg, #3b82f6, #2563eb); height: 100%; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; font-weight: bold; transition: width 1s ease-in-out; }
+        
+        .button-row { display: flex; gap: 15px; margin-bottom: 15px; }
+        .btn-ai { flex: 1; background: #8b5cf6; color: white; border: none; padding: 14px; border-radius: 8px; font-size: 15px; font-weight: bold; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 6px rgba(139, 92, 246, 0.2); }
+        .btn-ai:hover:not(:disabled) { background: #7c3aed; transform: translateY(-1px); }
+        .btn-ai:disabled { background: #c4b5fd; cursor: not-allowed; }
+        
+        .btn-download { flex: 1; background: #10b981; color: white; border: none; padding: 14px; border-radius: 8px; font-size: 15px; font-weight: bold; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 6px rgba(16, 185, 129, 0.2); }
+        .btn-download:hover { background: #059669; transform: translateY(-1px); }
+
+        .ai-result { background: #eff6ff; padding: 20px; border-radius: 8px; border-left: 5px solid #3b82f6; font-size: 15px; line-height: 1.6; white-space: pre-wrap; display: none; color: #1e3a8a; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h2 id="t-title">🏠 HomeFit Pro</h2>
+            <div class="lang-switch">
+                <button id="l-tr" onclick="setLang('TR')">TR</button>
+                <button id="l-en" onclick="setLang('EN')">EN</button>
+            </div>
+        </div>
+
+        <div class="search-container">
+            <div class="search-box">
+                <input type="text" id="address-input" placeholder="Adres, sokak veya ilçe ara..." oninput="debounceSearch()" autocomplete="off">
+                <button onclick="searchAddress()" title="Ara">🔍</button>
+            </div>
+            <div id="suggestions" class="suggestions"></div>
+        </div>
+
+        <div class="legend" id="t-legend">❌ Yok Say &nbsp;|&nbsp; ➖ Normal &nbsp;|&nbsp; ⭐ Çok Önemli</div>
+        <div id="prefs-list"></div>
+
+        <button id="btn-analyze" class="btn-run" disabled onclick="runAnalysis()">🚀 GeoAI Analizini Başlat</button>
+        <button id="btn-reset" class="btn-reset" onclick="resetSearch()">🔄 Yeni Araştırma Yap</button>
+        
+        <p id="status-msg" style="color: #ef4444; font-size: 13px; font-weight: bold; text-align: center; margin-top: 10px;"></p>
+    </div>
+
+    <div class="main-content">
+        <div class="map-container"><div id="map"></div></div>
+
+        <div class="results-panel" id="res-panel">
+            <h3 style="margin-top:0; color: #1e293b;" id="t-res-title">🤖 Analiz Sonuçları</h3>
+            <div class="score-box" id="final-score"></div>
+            
+            <table id="results-table">
+                <thead>
+                    <tr>
+                        <th id="th-f">Tesis Kategorisi</th>
+                        <th id="th-s" style="width: 20%;">Uygunluk Skoru</th>
+                        <th id="th-w">Yürüme (Mesafe/Süre)</th>
+                        <th id="th-d">Araç (Mesafe/Süre)</th>
+                    </tr>
+                </thead>
+                <tbody id="res-body"></tbody>
+            </table>
+
+            <div class="button-row">
+                <button class="btn-ai" onclick="getAIInterpret()" id="btn-ai">🤖 Yapay Zeka ile Yorumla</button>
+                <button class="btn-download" onclick="downloadReport()" id="btn-download">📥 Görsel Raporu İndir</button>
+            </div>
+            <div id="ai-text" class="ai-result"></div>
+        </div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+    let curLang = "TR";
+    let lastData = null; 
+    let isMapLocked = false; // HARİTA KİLİDİ DURUMU
+
+    const LANG = {
+        "TR": {
+            search_ph: "Adres, sokak veya ilçe ara...", legend: "❌ Yok Say &nbsp;|&nbsp; ➖ Normal &nbsp;|&nbsp; ⭐ Çok Önemli",
+            btn_run: "🚀 GeoAI Analizini Başlat", btn_reset: "🔄 Yeni Araştırma Yap", res_title: "🤖 Analiz Sonuçları", th_f: "Tesis Kategorisi", th_s: "Uygunluk Skoru", th_w: "Yürüme (Mesafe/Süre)", th_d: "Araç (Mesafe/Süre)",
+            btn_ai: "🤖 Yapay Zeka ile Yorumla", btn_dl: "📥 Görsel Raporu İndir", msg_err: "Lütfen en az bir tesis seçin!", msg_load: "⏳ Analiz Yapılıyor...", msg_ai_load: "⏳ AI Yorumluyor...", not_found: "Bulunamadı"
+        },
+        "EN": {
+            search_ph: "Search address, street or city...", legend: "❌ Ignore &nbsp;|&nbsp; ➖ Normal &nbsp;|&nbsp; ⭐ Crucial",
+            btn_run: "🚀 Run GeoAI Analysis", btn_reset: "🔄 Start New Search", res_title: "🤖 Analysis Results", th_f: "Facility Category", th_s: "Suitability Score", th_w: "Walking (Dist/Time)", th_d: "Driving (Dist/Time)",
+            btn_ai: "🤖 Ask AI to Interpret", btn_dl: "📥 Download Visual Report", msg_err: "Please select at least one facility!", msg_load: "⏳ Analyzing...", msg_ai_load: "⏳ AI Interpreting...", not_found: "Not Found"
+        }
+    };
+
+    const cats = [
+        { id:"h", icon: "🏥", n:{TR:"Hastane", EN:"Hospital"}, t:{amenity:"hospital"} },
+        { id:"e", icon: "💊", n:{TR:"Eczane", EN:"Pharmacy"}, t:{amenity:"pharmacy"} },
+        { id:"m", icon: "🛒", n:{TR:"Market", EN:"Supermarket"}, t:{shop:"supermarket"} },
+        { id:"p", icon: "🌳", n:{TR:"Park", EN:"Park"}, t:{leisure:"park"} },
+        { id:"t", icon: "🚌", n:{TR:"Toplu Taşıma", EN:"Public Transit"}, sub:[
+            {id:"bus", n:{TR:"Otobüs", EN:"Bus"}, t:{highway:"bus_stop"}}, 
+            {id:"metro", n:{TR:"Metro", EN:"Subway"}, t:{station:"subway"}},
+            {id:"tram", n:{TR:"Tramvay", EN:"Tram"}, t:{railway:"tram_stop"}}
+        ]},
+        { id:"s", icon: "🏫", n:{TR:"Okul", EN:"School"}, sub:[
+            {id:"kg", n:{TR:"Anaokulu", EN:"Kindergarten"}, t:{amenity:"kindergarten"}}, 
+            {id:"prim", n:{TR:"İlkokul", EN:"Primary"}, t:{amenity:"school", school:"primary"}}, 
+            {id:"high", n:{TR:"Lise", EN:"High"}, t:{amenity:"school"}}
+        ]},
+        { id:"w", icon: "🕌", n:{TR:"İbadethane", EN:"Place of worship"}, sub:[
+            {id:"any", n:{TR:"Genel (Tümü)", EN:"General (Any)"}, t:{amenity:"place_of_worship"}}, 
+            {id:"mosque", n:{TR:"Cami", EN:"Mosque"}, t:{amenity:"place_of_worship", religion:"muslim"}}, 
+            {id:"church", n:{TR:"Kilise", EN:"Church"}, t:{amenity:"place_of_worship", religion:"christian"}},
+            {id:"syn", n:{TR:"Sinagog", EN:"Synagogue"}, t:{amenity:"place_of_worship", religion:"jewish"}},
+            {id:"cemevi", n:{TR:"Cemevi", EN:"Cemevi"}, t:{amenity:"place_of_worship", religion:"alevi"}}
+        ]}
+    ];
+
+    function setLang(l) {
+        curLang = l;
+        document.getElementById('l-tr').className = l === 'TR' ? 'active' : '';
+        document.getElementById('l-en').className = l === 'EN' ? 'active' : '';
+        
+        document.getElementById('address-input').placeholder = LANG[l].search_ph;
+        document.getElementById('t-legend').innerHTML = LANG[l].legend;
+        if(!document.getElementById('btn-analyze').disabled) document.getElementById('btn-analyze').innerText = LANG[l].btn_run;
+        document.getElementById('btn-reset').innerText = LANG[l].btn_reset;
+        document.getElementById('t-res-title').innerText = LANG[l].res_title;
+        document.getElementById('th-f').innerText = LANG[l].th_f;
+        document.getElementById('th-s').innerText = LANG[l].th_s;
+        document.getElementById('th-w').innerText = LANG[l].th_w;
+        document.getElementById('th-d').innerText = LANG[l].th_d;
+        document.getElementById('btn-ai').innerText = LANG[l].btn_ai;
+        document.getElementById('btn-download').innerText = LANG[l].btn_dl;
+        
+        renderPrefs();
+    }
+
+    function renderPrefs() {
+        const list = document.getElementById('prefs-list');
+        list.innerHTML = "";
+        cats.forEach(c => {
+            let subH = "";
+            if(c.sub) {
+                subH = `<div class="sub-options" id="sub_${c.id}">` + 
+                       c.sub.map((s, idx) => `<label><input type="checkbox" class="c-${c.id}" value="${s.id}" ${idx===0?'checked':''}> ${s.n[curLang]}</label>`).join('') + 
+                       `</div>`;
+            }
+            list.innerHTML += `
+            <div class="pref-item">
+                <div class="pref-main">
+                    <div class="pref-label">${c.icon} ${c.n[curLang]}</div>
+                    <div class="radio-group">
+                        <input type="radio" name="${c.id}" id="${c.id}_0" value="0" checked onchange="document.getElementById('sub_${c.id}')?.style.setProperty('display','none')"><label for="${c.id}_0">❌</label>
+                        <input type="radio" name="${c.id}" id="${c.id}_1" value="1" onchange="document.getElementById('sub_${c.id}')?.style.setProperty('display','flex')"><label for="${c.id}_1">➖</label>
+                        <input type="radio" name="${c.id}" id="${c.id}_2" value="2" onchange="document.getElementById('sub_${c.id}')?.style.setProperty('display','flex')"><label for="${c.id}_2">⭐</label>
+                    </div>
+                </div>
+                ${subH}
+            </div>`;
+        });
+    }
+
+    // ==========================================
+    // HARİTA VE ARAMA
+    // ==========================================
+    let map = L.map('map').setView([41.1044, 29.0284], 14);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
+    
+    let homeMarker = null; 
+    let facGroup = L.layerGroup().addTo(map);
+    let curLat = null, curLng = null;
+
+    let searchTimeout;
+    function debounceSearch() {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(fetchSuggestions, 500); 
+    }
+
+    async function fetchSuggestions() {
+        const q = document.getElementById('address-input').value;
+        const suggDiv = document.getElementById('suggestions');
+        
+        if(q.length < 3) { suggDiv.style.display = 'none'; return; } 
+        
+        try {
+            const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}&addressdetails=1&limit=5`);
+            const data = await res.json();
+            
+            suggDiv.innerHTML = '';
+            if(data.length > 0) {
+                data.forEach(item => {
+                    let div = document.createElement('div');
+                    div.className = 'sugg-item';
+                    div.innerText = item.display_name;
+                    div.onclick = () => {
+                        document.getElementById('address-input').value = item.display_name;
+                        suggDiv.style.display = 'none';
+                        setHome(item.lat, item.lon);
+                        map.setView([item.lat, item.lon], 16);
+                    };
+                    suggDiv.appendChild(div);
+                });
+                suggDiv.style.display = 'block';
+            } else {
+                suggDiv.style.display = 'none';
+            }
+        } catch(e) { suggDiv.style.display = 'none'; }
+    }
+
+    async function searchAddress() {
+        if(isMapLocked) return; // Kilitliyse arama yapma
+        document.getElementById('suggestions').style.display = 'none';
+        const q = document.getElementById('address-input').value;
+        if(!q) return;
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}`);
+        const data = await res.json();
+        if(data.length > 0) {
+            setHome(data[0].lat, data[0].lon);
+            map.setView([data[0].lat, data[0].lon], 16);
+        }
+    }
+
+    document.addEventListener('click', function(e) {
+        if (!document.getElementById('address-input').contains(e.target)) {
+            document.getElementById('suggestions').style.display = 'none';
+        }
+    });
+
+    // Özel Ev İşaretçisi (🏠)
+    const homeIcon = L.divIcon({
+        className: 'home-marker',
+        html: `<div>🏠</div>`,
+        iconSize: [32, 32],
+        iconAnchor: [16, 16],
+        popupAnchor: [0, -16]
+    });
+
+    function setHome(lat, lon) {
+        if(isMapLocked) return; // Harita kilitliyse yeni konum seçtirme
+        curLat = parseFloat(lat); curLng = parseFloat(lon);
+        if(homeMarker) map.removeLayer(homeMarker);
+        
+        homeMarker = L.marker([curLat, curLng], {icon: homeIcon, draggable: true}).addTo(map).bindPopup("<b>Hedef Ev</b>").openPopup();
+        homeMarker.on('dragend', (e) => { 
+            curLat = e.target.getLatLng().lat; curLng = e.target.getLatLng().lng; 
+            resetUI();
+        });
+        resetUI();
+        document.getElementById('btn-analyze').disabled = false;
+    }
+
+    // Haritaya tıklanınca kilit kontrolü
+    map.on('click', (e) => {
+        if(!isMapLocked) setHome(e.latlng.lat, e.latlng.lng);
+    });
+
+    function resetUI() {
+        document.getElementById('res-panel').style.display = "none";
+        document.getElementById('ai-text').style.display = "none";
+        facGroup.clearLayers();
+    }
+
+    // YENİ ARAŞTIRMA (Kilidi Aç) FONKSİYONU
+    function resetSearch() {
+        isMapLocked = false;
+        document.getElementById('btn-analyze').style.display = 'block';
+        document.getElementById('btn-reset').style.display = 'none';
+        document.getElementById('address-input').disabled = false;
+        
+        if(homeMarker) homeMarker.dragging.enable(); // Sürüklemeyi tekrar aç
+        resetUI(); // Tabloları gizle, çizgileri temizle
+        map.setView([curLat, curLng], 15); // Sadece eve odaklan
+    }
+
+    // ==========================================
+    // ANALİZ VE SONUÇLAR
+    // ==========================================
+    async function runAnalysis() {
+        let prefs = {};
+        cats.forEach(c => {
+            let weight = parseInt(document.querySelector(`input[name="${c.id}"]:checked`).value);
+            if(weight > 0) {
+                if(c.sub) {
+                    document.querySelectorAll(`.c-${c.id}:checked`).forEach(chk => {
+                        let subObj = c.sub.find(x => x.id === chk.value);
+                        prefs[`${c.icon} ${c.n[curLang]} (${subObj.n[curLang]})`] = {tags: subObj.t, weight: weight};
+                    });
+                } else {
+                    prefs[`${c.icon} ${c.n[curLang]}`] = {tags: c.t, weight: weight};
+                }
+            }
+        });
+
+        if(Object.keys(prefs).length === 0) {
+            document.getElementById('status-msg').innerText = LANG[curLang].msg_err; return;
+        }
+
+        const btn = document.getElementById('btn-analyze');
+        btn.innerText = LANG[curLang].msg_load; 
+        btn.disabled = true;
+        document.getElementById('status-msg').innerText = "";
+        facGroup.clearLayers();
+
+        try {
+            const response = await fetch('/api/analyze', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ lat: curLat, lon: curLng, prefs: prefs, lang: curLang })
+            });
+            const data = await response.json();
+            
+            if(data.status === "success") {
+                lastData = data;
+                
+                // ANALİZ BAŞARILI: HARİTAYI KİLİTLE VE BUTONLARI DEĞİŞTİR
+                isMapLocked = true;
+                btn.style.display = 'none';
+                document.getElementById('btn-reset').style.display = 'block';
+                document.getElementById('address-input').disabled = true;
+                if(homeMarker) homeMarker.dragging.disable(); // Evin sürüklenmesini kapat
+
+                document.getElementById('res-panel').style.display = "block";
+                document.getElementById('ai-text').style.display = "none";
+                document.getElementById('final-score').innerText = `${curLang==='TR'?'Genel Skor':'Final Score'}: ${data.final_score} / 100`;
+                
+                const tbody = document.getElementById('res-body');
+                tbody.innerHTML = "";
+
+                for (const [catName, detail] of Object.entries(data.details)) {
+                    let tr = document.createElement('tr');
+                    let sc = Math.max(0, detail.score);
+                    
+                    if (detail.metrics) {
+                        tr.innerHTML = `
+                            <td><b>${catName}</b><br><span style="font-size:11px; color:#64748b;">(Kuşbakışı: ${detail.metrics.bird}m)</span></td>
+                            <td>
+                                <div class="progress-bg">
+                                    <div class="progress-fill" style="width: ${sc}%; background: ${sc>75 ? '#22c55e' : sc>40 ? '#f59e0b' : '#ef4444'};">
+                                        ${sc}
+                                    </div>
+                                </div>
+                            </td>
+                            <td><b>${detail.metrics.walk_d} m</b> <br><span style="color:#64748b">(${detail.metrics.walk_t})</span></td>
+                            <td><b>${detail.metrics.drive_d} m</b> <br><span style="color:#64748b">(${detail.metrics.drive_t})</span></td>
+                        `;
+                        
+                        // İlgili tesisin emojisini isminden çekip özel pin oluşturma
+                        let emoji = catName.split(' ')[0]; 
+                        let facilityIcon = L.divIcon({
+                            className: 'facility-marker',
+                            html: `<div>${emoji}</div>`,
+                            iconSize: [28, 28],
+                            iconAnchor: [14, 14],
+                            popupAnchor: [0, -14]
+                        });
+
+                        L.marker(detail.nearest, {icon: facilityIcon}).addTo(facGroup).bindPopup(`<b>${catName}</b><br>Yürüme: ${detail.metrics.walk_t}`);
+                        L.polyline([[curLat, curLng], detail.nearest], {color: '#3b82f6', weight: 3, opacity: 0.7, dashArray: '8, 8'}).addTo(facGroup);
+                    } else {
+                        tr.innerHTML = `<td><b>${catName}</b></td><td colspan="3" style="text-align:center; color:#ef4444; font-weight:bold;">${LANG[curLang].not_found} (- Ceza)</td>`;
+                    }
+                    tbody.appendChild(tr);
+                }
+                
+                let group = new L.featureGroup([homeMarker, ...facGroup.getLayers()]);
+                map.fitBounds(group.getBounds().pad(0.1));
+            } else {
+                document.getElementById('status-msg').innerText = "Hata: " + data.message;
+            }
+        } catch (error) { 
+            document.getElementById('status-msg').innerText = "Bağlantı Hatası: Sunucuya ulaşılamıyor."; 
+        }
+
+        btn.innerText = LANG[curLang].btn_run; 
+        btn.disabled = false;
+    }
+
+    async function getAIInterpret() {
+        const btnAi = document.getElementById('btn-ai');
+        const aiDiv = document.getElementById('ai-text');
+        
+        btnAi.innerText = LANG[curLang].msg_ai_load; 
+        btnAi.disabled = true;
+        aiDiv.style.display = "block"; 
+        aiDiv.innerText = "...";
+
+        try {
+            const response = await fetch('/api/interpret', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ final_score: lastData.final_score, details: lastData.details, lang: curLang })
+            });
+            const data = await response.json();
+            aiDiv.innerText = data.interpretation;
+        } catch (error) { aiDiv.innerText = "Yapay Zeka Hatası."; }
+
+        btnAi.innerText = LANG[curLang].btn_ai; 
+        btnAi.disabled = false;
+    }
+
+    function downloadReport() {
+        const tableHTML = document.getElementById('results-table').outerHTML;
+        const scoreHTML = document.getElementById('final-score').innerText;
+        const mapHTML = document.getElementById('map').innerHTML;
+        const mapExport = `<div style="position: relative; width: 100%; height: 400px; border: 2px solid #e2e8f0; border-radius: 12px; overflow: hidden; margin-bottom: 20px;">${mapHTML}</div>`;
+
+        const aiText = document.getElementById('ai-text').style.display === 'block' ? 
+            `<div style="background:#eff6ff; padding:20px; border-left:5px solid #3b82f6; margin:20px 0; border-radius:8px;">
+                <h3 style="margin-top:0; color:#1e3a8a;">🤖 AI Interpretation</h3>
+                <p style="white-space:pre-wrap; line-height:1.6; color:#1e3a8a;">${document.getElementById('ai-text').innerText}</p>
+            </div>` : '';
+
+        const htmlContent = `
+        <html>
+        <head>
+            <meta charset="utf-8"><title>HomeFit Visual Report</title>
+            <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+            <style>
+                body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 40px; background: #f8fafc; color: #334155;}
+                .container { max-width: 900px; margin: auto; background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+                h1 { text-align: center; border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; color: #1e293b;}
+                .score { background: #f0fdf4; color: #166534; padding: 20px; text-align: center; font-size: 26px; font-weight: 800; border-radius: 8px; border: 1px solid #bbf7d0; margin-bottom: 30px;}
+                table { width: 100%; border-collapse: collapse; margin-bottom:30px;}
+                th, td { border: 1px solid #e2e8f0; padding: 15px; text-align: left; }
+                th { background: #f8fafc; font-weight: bold; }
+                .progress-bg { background: #e2e8f0; border-radius: 4px; width: 100%; height: 18px; position: relative;}
+                .footer { text-align:center; font-size:12px; color:#94a3b8; margin-top:40px; border-top:1px solid #e2e8f0; padding-top:20px;}
+                .leaflet-control-container { display: none !important; }
+                .home-marker { background: #1e293b; border: 2px solid white; border-radius: 50%; text-align: center; line-height: 30px; font-size: 18px; display: flex; justify-content: center; align-items: center; }
+                .facility-marker { background: white; border: 2px solid #3b82f6; border-radius: 50%; text-align: center; line-height: 26px; font-size: 15px; display: flex; justify-content: center; align-items: center;}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>🏠 HomeFit Agent - GeoAI Report</h1>
+                <div class="score">${scoreHTML}</div>
+                ${mapExport}
+                ${tableHTML}
+                ${aiText}
+                <div class="footer">Generated by HomeFit Pro API Engine • Data © OpenStreetMap</div>
+            </div>
+            <script>window.onload = function() { setTimeout(() => window.print(), 500); }<\/script>
+        </body>
+        </html>`;
+
+        const blob = new Blob([htmlContent], { type: 'text/html' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `HomeFit_Report_${curLang}.html`;
+        a.click();
+    }
+
+    setLang('TR');
+</script>
+</body>
+</html>

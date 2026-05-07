@@ -1,7 +1,5 @@
-streamlit
+fastapi
+uvicorn
 requests
-folium
-streamlit-folium
 geopy
-pandas
-google-generativeai
+google-genai
