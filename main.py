@@ -7,6 +7,7 @@ from geopy.distance import geodesic
 import concurrent.futures
 import time
 from google import genai
+import os
 
 # ==========================================
 # 1. YAPAY ZEKA VE API AYARLARI
