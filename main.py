@@ -200,7 +200,7 @@ async def get_ai_interpretation(req: dict):
     for attempt in range(max_retries):
         try:
             response = ai_client.models.generate_content(
-                model='gemini-1.5-flash', # 2.0 veya 2.5 yerine 1.5 daha stabildir
+                model='gemini-2.0-flash', 
                 contents=prompt
             )
             return {"interpretation": response.text}
