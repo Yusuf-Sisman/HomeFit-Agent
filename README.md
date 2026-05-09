@@ -1,6 +1,6 @@
-# 🏠 HomeFit Pro Agent: Akıllı Konum Analiz Asistanı
+# 🏠 HomeFit Agent: Akıllı Konum Analiz Asistanı
 
-**HomeFit Pro Agent**, bir evin çevresel imkanlarını (hastane, okul, ulaşım vb.) hem sayısal verilerle hem de yapay zeka yorumlarıyla analiz eden, coğrafi bilgi sistemleri (GIS) tabanlı bir web uygulamasıdır.
+**HomeFit Agent**, bir evin çevresel imkanlarını (hastane, okul, ulaşım vb.) hem sayısal verilerle hem de yapay zeka yorumlarıyla analiz eden, coğrafi bilgi sistemleri (GIS) tabanlı bir web uygulamasıdır.
 
 ![Language](https://img.shields.io/badge/Language-Turkish%20%2F%20English-blue)
 ![Framework](https://img.shields.io/badge/Framework-FastAPI-green)
