@@ -1,4 +1,4 @@
-# 🏠 HomeFit Agent: Akıllı Konum Analiz Asistanı
+# 🏠 HomeFit Agent: Akıllı Konum Analiz Asistanı 
 
 **HomeFit Agent**, bir evin çevresel imkanlarını (hastane, okul, ulaşım vb.) hem sayısal verilerle hem de yapay zeka yorumlarıyla analiz eden, coğrafi bilgi sistemleri (GIS) tabanlı bir web uygulamasıdır.
 
