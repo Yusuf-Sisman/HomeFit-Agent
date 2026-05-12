@@ -83,3 +83,28 @@ Bu proje eğitim amaçlı geliştirilmiştir. Veri kaynağı olarak OpenStreetMa
 1. Klasöründe `README.md` adında yeni bir dosya oluştur.
 2. Yukarıdaki metni içine yapıştır.
 3. GitHub'a yüklediğinde bu metin ana sayfada çok şık bir şekilde görünecektir.
+
+## 📚 Referanslar & Kaynakça
+
+Projenin geliştirilmesinde kullanılan açık kaynaklı veriler, kütüphaneler ve servis sağlayıcılar aşağıda listelenmiştir:
+
+1. **OpenStreetMap (OSM) Data:** * Harita altlığı ve mekansal veri kaynağı olarak OpenStreetMap kullanılmıştır. Veriler [Open Database License (ODbL)](https://opendatacommons.org/licenses/odbl/) kapsamında temin edilmektedir.
+   * *Referans:* OpenStreetMap contributors. (2026). Planet dump retrieved from [https://planet.openstreetmap.org](https://planet.openstreetmap.org)
+
+2. **Overpass API:** * Tesislerin (hastane, okul, park vb.) anlık koordinat sorgulamaları Overpass API üzerinden asenkron olarak gerçekleştirilmiştir.
+   * *Referans:* Olbricht, R. (2026). Overpass API. [https://overpass-api.de/](https://overpass-api.de/)
+
+3. **OSRM (Open Source Routing Machine):** * Kuşbakışı mesafe yerine, gerçek yol ağı algoritmalarıyla yürüme ve sürüş sürelerinin hesaplanmasında OSRM motoru kullanılmıştır.
+   * *Referans:* Luxen, D., & Vetter, C. (2011). Real-time routing with OpenStreetMap data. *Proceedings of the 19th ACM SIGSPATIAL International Conference on Advances in Geographic Information Systems*. [http://project-osrm.org/](http://project-osrm.org/)
+
+4. **Nominatim API:** * Adres arama ve otomatik tamamlama (Geocoding / Autocomplete) işlemleri için entegre edilmiştir.
+   * *Referans:* Nominatim Geocoding Service. [https://nominatim.org/](https://nominatim.org/)
+
+5. **Google Gemini API (GeoAI):** * Elde edilen ham mekansal verilerin doğal dil işleme (NLP) yetenekleriyle son kullanıcıya hitap edecek profesyonel bir gayrimenkul raporuna dönüştürülmesinde `gemini-1.5-flash` modeli kullanılmıştır.
+   * *Referans:* Google Generative AI SDK. [https://ai.google.dev/](https://ai.google.dev/)
+
+6. **Leaflet.js:** * Web tabanlı harita arayüzünün, özel işaretçilerin ve vektörel çizimlerin istemci tarafında görselleştirilmesi için tercih edilmiştir.
+   * *Referans:* Agafonkin, V. (2026). Leaflet: An open-source JavaScript library for mobile-friendly interactive maps. [https://leafletjs.com/](https://leafletjs.com/)
+
+7. **FastAPI Framework:** * Yüksek performanslı asenkron API uç noktalarının (endpoints) oluşturulmasında altyapı olarak kullanılmıştır.
+   * *Referans:* Ramírez, S. (2026). FastAPI. [https://fastapi.tiangolo.com/](https://fastapi.tiangolo.com/)
